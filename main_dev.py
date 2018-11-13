@@ -60,138 +60,93 @@ if __name__ == '__main__':
     #                             BEGIN BULK PROCESSING LOOP
     #===============================================================================================    
     
-#    ## << FOR BULK PROCESSING >>
-#    ## Specify path to root:
-#    lst_paths = glob.glob(r"D:\facet\SampleStructure\*")
-#    lst_paths.sort() # for testing
-#    
-#    #===============================================================================================   
-#    ## Chesapeake file structure:
-#    #===============================================================================================   
-#    for i, path in enumerate(lst_paths):
-#        
-#        str_nhdhr_huc4 = glob.glob(path + '\*.shp')[0]
-#        
-#        ## Reproject the nhdhr lines to same as DEM:
-#        dst_crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'      
-#        
-#        ## Re-project the NHD to match the DEM:
-##        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)        
-#        
-#        for root, dirs, files in os.walk(path):
-#            try:
-#                str_huc = fnmatch.filter(files, '*.shp')[0]
-#                str_dem = fnmatch.filter(files, '*.tif')[0]
-#            except:
-#                continue
-#            
-#            if i != 1: continue
-#            
-#            ## Get the DEM and HUC10 poly mask file paths:
-#            str_dem_path = root + '\\' + str_dem
-##            str_hucmask_path = root + '\\' + str_huc[1:]
-#            
-#            ## Assign a name for the clipped NHD-HR HUC10 file:
-#            path_to_dem, dem_filename = os.path.split(str_dem_path)
-#            str_nhdhr_huc10 = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp'            
-#            
-#            ## Clip the HUC4 nhdhr streamlines layer to the HUC10:  
-#            str_nhdhr_huc4_proj=r"D:\facet\SampleStructure\0206\0206_proj.shp"
-#            funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path) 
-#            
-#            break
-#            
-#            ## Call preprocessing function: 
-#            funcs_v2.preprocess_dem(str_dem_path, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)             
-#            
-##            sys.exit() # for testing
-
     ## << FOR BULK PROCESSING >>
     ## Specify path to root:
-    lst_paths = glob.glob(r'E:\bulk_processing\*')
+    lst_paths = glob.glob(r"F:\facet\CFN_CB_HUC10\*")[1]
+    lst_paths = [lst_paths]
     lst_paths.sort() # for testing
-    
-#    #===============================================================================================   
-#    ## Chesapeake file structure:
-#    #===============================================================================================   
-#    for i, path in enumerate(lst_paths):
-#        
-#        str_nhdhr_huc4 = glob.glob(path + '\*.shp')[0]
-#        
-#        ## Reproject the nhdhr lines to same as DEM:
-#        dst_crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'      
-#        
-#        ## Re-project the NHD to match the DEM:
-#        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)        
-#        
-#        for root, dirs, files in os.walk(path):
-#            try:
-#                str_huc = fnmatch.filter(files, '*.shp')[0]
-#                str_dem = fnmatch.filter(files, '*.tif')[0]
-#            except:
-#                continue
-#            
-#            ## Get the DEM and HUC10 poly mask file paths:
-#            str_dem_path = root + '\\' + str_dem
-#            str_hucmask_path = root + '\\' + str_huc[1:]
-#            
-#            ## Assign a name for the clipped NHD-HR HUC10 file:
-#            path_to_dem, dem_filename = os.path.split(str_dem_path)
-#            str_nhdhr_huc10 = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp'
-#
-#            # Project all dem rasters
-#            name, ext = str_dem.split('.')
-#            dst_file = root + '\\' + name + '_proj.' + ext
-#            funcs_v2.reproject_grid_layer(str_dem_path, dst_crs, dst_file, resolution=(3.0, 3.0))
-#
-#            # new dem path
-#            str_dem_path = dst_file
-#
-#            ## Clip the HUC4 nhdhr streamlines layer to the HUC10:  
-#            # str_nhdhr_huc4_proj= r"D:\facet\SampleStructure\0205\0205_proj.shp"
-#            funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path) 
-#            
-#            # break
-#            
-#            ## Call preprocessing function: 
-#            funcs_v2.preprocess_dem(str_dem_path, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)             
-##          sys.exit() # for testing
+
+    #===============================================================================================   
+    #                           Chesapeake file structure:
+    #===============================================================================================   
+    for i, path in enumerate(lst_paths):
+        str_nhdhr_huc4 = glob.glob(path + '\*.shp')[0] # F:\facet\CFN_CB_HUC10\0206\0206.shp
+        
+        ## Reproject the nhdhr lines to same as DEM:
+        #dst_crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'      
+        dst_crs="+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"
+
+        ## Re-project the NHD to match the DEM:
+        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)  # F:\facet\CFN_CB_HUC10\0205\0205_proj.shp       
+#        str_nhdhr_huc4_proj = r'F:\facet\CFN_CB_HUC10\0206\0206_proj.shp'
+        for root, dirs, files in os.walk(path):
+            try:
+                str_huc = fnmatch.filter(files, '*.shp')[0]
+                str_dem = fnmatch.filter(files, '*.tif')[0]
+            except:
+                continue
+
+            # HUC IDs
+            """ HUC12 ids for naming files:       
+                huc12 = root[27:] # assuming huc4 dir with huc10 dirs"""
+            huc12 = root.split('\\')[-1:][0] # 0206000603
             
+            ## Get the DEM and HUC10 poly mask file paths:
+            str_dem_path = root + '\\' + str_dem # F:\facet\CFN_CB_HUC10\0206\0206000603\0206000603_dem.tif
+
+            ## Assign a name for the clipped NHD-HR HUC10 file:
+            path_to_dem, dem_filename = os.path.split(str_dem_path)
+            str_nhdhr_huc10 = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp'            
+            
+            # Project dem raster
+            name, ext = str_dem.split('.')
+            dst_file = os.path.join(root, f"{name}_proj.{ext}")
+            str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, dst_crs, dst_file, resolution=(3.0, 3.0))
+
+            ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
+            funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj) 
+
+            ## Call preprocessing function:
+#            str_dem_path = r'F:\facet\CFN_CB_HUC10\0206\0206000603\0206000603_dem_proj.tif'
+            funcs_v2.preprocess_dem(str_dem_path, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)             
+            break
+        break
+           
     #===============================================================================================           
     ## DRB file structure:
     #===============================================================================================   
-    for i, path in enumerate(lst_paths):
-        
-        if i < 9: continue
-         
-        print('Processing:  ' + path)
-        
-        start_time_i = timeit.default_timer()
-    
-        try:
-            str_dem_path = glob.glob(os.path.join(path,'*_dem.tif'))[0]
-            str_hand_path = glob.glob(os.path.join(path,'*hand*.tif'))[0]
-            str_net_path = glob.glob(os.path.join(path,'*breach_net.shp'))[0]    
-            str_sheds_path = glob.glob(os.path.join(path,'*w_diss_physio*.shp'))[0]
-        except:
-            print('WARNING:  There is an error in the paths!')
-            pass # depending on what's being run, it might not matter if a file doesn't exist
-        
-        path_to_dem, dem_filename = os.path.split(str_dem_path)
-        csv_filename = dem_filename[:-8] + '.csv'
-        str_csv_path = os.path.join(path_to_dem, csv_filename)
-        
-        # Output layers...
-        out_path=r'E:\bulk_processing\drb_chwidpixels_2018.09.10'
-        str_chxns_path = os.path.join(out_path, dem_filename[:-8] + '_chxns.shp')
-        str_chxns_path = os.path.join(out_path, dem_filename[:-8] + '_chxns.shp')
-        str_fpxns_path = os.path.join(out_path, dem_filename[:-8] + '_fpxns.shp')
-        str_bankpts_path = os.path.join(out_path, dem_filename[:-8] + '_bankpts.shp')
-        str_bankpixels_path = os.path.join(out_path, dem_filename[:-8] + '_bankpixels.tif')
-        
-        # Call preprocessing function: 
-        dst_crs = {'init': u'epsg:26918'} # NAD83, UTM18N  
-        funcs_v2.preprocess_dem(str_dem_path, str_net_path, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)         
+#    for i, path in enumerate(lst_paths):
+#        
+#        if i < 9: continue
+#         
+#        print('Processing:  ' + path)
+#        
+#        start_time_i = timeit.default_timer()
+#    
+#        try:
+#            str_dem_path = glob.glob(os.path.join(path,'*_dem.tif'))[0]
+#            str_hand_path = glob.glob(os.path.join(path,'*hand*.tif'))[0]
+#            str_net_path = glob.glob(os.path.join(path,'*breach_net.shp'))[0]    
+#            str_sheds_path = glob.glob(os.path.join(path,'*w_diss_physio*.shp'))[0]
+#        except:
+#            print('WARNING:  There is an error in the paths!')
+#            pass # depending on what's being run, it might not matter if a file doesn't exist
+#        
+#        path_to_dem, dem_filename = os.path.split(str_dem_path)
+#        csv_filename = dem_filename[:-8] + '.csv'
+#        str_csv_path = os.path.join(path_to_dem, csv_filename)
+#        
+#        # Output layers...
+#        out_path=r'E:\bulk_processing\drb_chwidpixels_2018.09.10'
+#        str_chxns_path = os.path.join(out_path, dem_filename[:-8] + '_chxns.shp')
+#        str_chxns_path = os.path.join(out_path, dem_filename[:-8] + '_chxns.shp')
+#        str_fpxns_path = os.path.join(out_path, dem_filename[:-8] + '_fpxns.shp')
+#        str_bankpts_path = os.path.join(out_path, dem_filename[:-8] + '_bankpts.shp')
+#        str_bankpixels_path = os.path.join(out_path, dem_filename[:-8] + '_bankpixels.tif')
+#        
+#        # Call preprocessing function: 
+#        dst_crs = {'init': u'epsg:26918'} # NAD83, UTM18N  
+#        funcs_v2.preprocess_dem(str_dem_path, str_net_path, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)         
         
         # << GET CELL SIZE >>
 #        cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?        
