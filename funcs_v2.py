@@ -179,7 +179,7 @@ def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
     print('Reprojecting grid layer...')
     with rasterio.open(str_source_grid) as src:
         transform, width, height = calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds, resolution)
+            src.crs, dst_crs, src.width, src.height, *src.bounds, resolution=resolution)
         kwargs = src.meta.copy()
         kwargs.update({
             'crs': dst_crs,
