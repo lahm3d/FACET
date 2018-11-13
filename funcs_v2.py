@@ -199,6 +199,8 @@ def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
                     dst_crs=dst_crs,
                     resampling=Resampling.nearest)
 
+    return dst_file
+
 # ==========================================================================
 #   Reproject a vector layer using geopandas 
 # ==========================================================================
@@ -529,23 +531,26 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
     try:
         
         # Split DEM path and filename...  # NOT OS INDEPENDENT??
-        path_to_dem, dem_filename = os.path.split(str_dem_path)        
+        path_to_dem, dem_filename = os.path.split(str_dem_path)
+#        F:\facet\CFN_CB_HUC10\0206\0206000603 0206000603_dem_proj.tif
         
+        dem_filename = str(dem_filename[:-9]) # 0206000603_dem
         ## Set this for a custom output folder:
 #        path_to_dem = '/home/sam/drb_preprocess_2018.08.28'
 
         inputProc = str(2) # number of cores to use for TauDEM processes
                
         # << Define all filenames here >>
-        str_danglepts_path = os.path.join(path_to_dem + '/' + dem_filename[:-4]+'_wg.tif')
+        str_danglepts_path = os.path.join(path_to_dem, dem_filename + '_wg.tif')
         
-        dem_filename_tif = dem_filename[:-4]+'.tif'
-        breach_filename_dep = dem_filename[:-4]+'_breach.dep'
-        breach_filename_tif = dem_filename[:-4]+'_breach.tif'
+        dem_filename_tif = f"{dem_filename}_proj.tif" #'0206000603_dem_proj.tif
+        breach_filename_dep = f"{dem_filename}_breach.dep"
+        breach_filename_tif = f"{dem_filename}_breach.tif"
         breach_filepath_tif = os.path.join(path_to_dem, breach_filename_tif)
         breach_filepath_tif_proj = breach_filepath_tif[:-4] + '_proj.tif'
         
-        str_dem_path_tif = os.path.join(path_to_dem + '/' + dem_filename[:-4]+'.tif')
+#        str_dem_path_tif = os.path.join(path_to_dem + '/' + dem_filename[:-4]+'.tif')
+        str_dem_path_tif = str_dem_path
         
         
 #        fel = path_to_dem + '\\' + dem_filename[:-4]+'_breach.tif'
@@ -564,6 +569,30 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
         slp = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_slp.tif')
         ang = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_ang.tif')
         dd = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_hand.tif')
+        
+#        print ("01", path_to_dem)	                
+#        print ("02", dem_filename)	            
+#        print ("03", dem_filename)	            
+#        print ("04", str_danglepts_path)	        
+#        print ("05", dem_filename_tif)	        
+#        print ("06", breach_filename_dep)	        
+#        print ("07", breach_filename_tif)	        
+#        print ("08", breach_filepath_tif)	        
+#        print ("09", breach_filepath_tif_proj)	
+#        print ("10", str_dem_path_tif)	        
+#        print ("11", p)	                        
+#        print ("12", sd8)	                        
+#        print ("13", ad8_wg)	                    
+#        print ("14", wtgr)	                    
+#        print ("15", ad8_no_wg)	                
+#        print ("16", ord_g)	                    
+#        print ("17", tree)	                    
+#        print ("18", coord)	                    
+#        print ("19", net)	                        
+#        print ("20", w)	                        
+#        print ("21", slp)	                        
+#        print ("22", ang)	                        
+#        print ("23", dd)	
         
 #        # ==================== TauDEM Paths =========================
         # Hardcode paths from user input...
@@ -590,7 +619,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
 
             print('Whitebox .exe path:  ' + 'r' + '"' + str_whitebox_path + '"')
             str_whitebox_dir, str_whitebox_exe = os.path.split(str_whitebox_path) 
-        
+            
             ## << Run the BreachDepressions tool, specifying the arguments >>
             name = "BreachDepressions"        
             args = [dem_filename_tif, breach_filename_dep, '-1', '-1', 'True', 'True'] # GoSpatial verion. NOTE:  Make these last four variables accessible to user?
@@ -608,7 +637,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
             ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
             if ret != 0:
                 print("ERROR: return value={}".format(ret))  
-            
+
             ## The converted TIFF file is saved without a crs, so save a projected version:                        
             define_grid_projection(breach_filepath_tif, dst_crs, breach_filepath_tif_proj)
             
@@ -673,7 +702,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
 #            cmd = '"' + mpipath + '"' + ' -n ' + inputProc + ' ' + d8flowdir + ' -fel ' + '"' + str_dem_path + '"' + ' -p ' + '"' + p + '"' + \
 #                  ' -sd8 ' + '"' + sd8 + '"'
                   
-            cmd = 'mpiexec' + ' -n ' + inputProc + ' d8flowdir -fel ' + '"' + breach_filepath_tif + '"' + ' -p ' + '"' + p + '"' + \
+            cmd = 'mpiexec' + ' -n ' + inputProc + ' d8flowdir -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -p ' + '"' + p + '"' + \
                   ' -sd8 ' + '"' + sd8 + '"'                  
                           
             # Submit command to operating system
@@ -757,7 +786,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
 #                
             # ============= << 5. Dinf with TauDEM >> =============        YES        
             print('Running TauDEM Dinfinity...')        
-            cmd = 'mpiexec -n ' + inputProc + ' DinfFlowDir -fel ' + '"' + breach_filepath_tif + '"' + ' -ang ' + '"' + ang + '"' + \
+            cmd = 'mpiexec -n ' + inputProc + ' DinfFlowDir -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -ang ' + '"' + ang + '"' + \
                   ' -slp ' + '"' + slp + '"'
             
             # Submit command to operating system
