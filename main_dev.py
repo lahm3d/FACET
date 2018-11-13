@@ -52,8 +52,8 @@ if __name__ == '__main__':
     str_whitebox_path= r"D:\git_projects\FACET_misc\white_box_go_spatial\go-spatial_win_amd64.exe" # Go version
   
     ## Flags specifying what to run:
-    run_whitebox = False  # Run Whitebox-BreachDepressions?
-    run_wg = False       # Run create weight grid by finding start points from a given streamlines layer?
+    run_whitebox = True  # Run Whitebox-BreachDepressions?
+    run_wg = True       # Run create weight grid by finding start points from a given streamlines layer?
     run_taudem = True   # Run TauDEM functions?    
 
     #=============================================================================================== 
