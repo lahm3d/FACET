@@ -534,7 +534,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
         path_to_dem, dem_filename = os.path.split(str_dem_path)
 #        F:\facet\CFN_CB_HUC10\0206\0206000603 0206000603_dem_proj.tif
         
-        dem_filename = str(dem_filename[:-9]) # 0206000603_dem
+        dem_filename = str(dem_filename).split('_')[0] # 0206000603_dem
         ## Set this for a custom output folder:
 #        path_to_dem = '/home/sam/drb_preprocess_2018.08.28'
 
