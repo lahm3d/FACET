@@ -109,7 +109,7 @@ if __name__ == '__main__':
 
             ## Call preprocessing function:
             funcs_v2.preprocess_dem(str_dem_path_proj, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)
-
+            
             #### start of post-processing steps(???)
             # root is F:\facet\CFN_CB_HUC10\0206\0206000603\
             str_dem_path          = os.path.join(root,f'{huc12}_dem_proj.tif')
@@ -142,7 +142,7 @@ if __name__ == '__main__':
             str_csv_path        = os.path.join(root, f'{huc12}.csv')
             str_chxns_path      = os.path.join(root, f'{huc12}_breach_chxns.shp')       
             str_bankpts_path    = os.path.join(root, f'{huc12}_breach_bankpts.shp')
-            str_chanmet_segs    = os.path.join(root, f'{huc12}_breach_breach_net_ch_width.shp')
+            str_chanmet_segs    = os.path.join(root, f'{huc12}_breach_net_ch_width.shp')
             str_bankpixels_path = os.path.join(root, f'{huc12}_breach_bankpixels.tif')        
             str_fpxns_path      = os.path.join(root, f'{huc12}_breach_fpxns.shp')
             str_fim_path        = os.path.join(root, f'{huc12}_breach_dem_breach_hand_3sqkm_fim.tif')        
