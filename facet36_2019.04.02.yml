@@ -1,0 +1,15 @@
+name: facet36
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.6
+  - fiona
+  - geopandas
+  - jenkspy
+  - matplotlib 
+  - numpy 
+  - pandas 
+  - rasterio 
+  - scipy 
+  - shapely
