@@ -80,22 +80,22 @@ Before we can execute FACET, we need to set up an environment on Anaconda so fro
 
 Now we are going to create an unique environment for FACET copy and paste the following command:
 
-        conda create -f c:\chesapeake_bay\FACET\facet36_2019.04.02.yml
+        conda env create -f c:\chesapeake_bay\FACET\facet36_2019.04.02.yml
 
 This creates a new environment called `facet36` and all the relevant packages needed. Next step is to activate the environment and run FACET
 
 After launching Anaconda prompt the window displays:
 
-    (base) C:\chesapeake_bay\FACET>
+        (base) C:\chesapeake_bay\FACET>
 
 "base" is the base environment that is currently active, we want to switch from **base** to **facet36**. To activate the new environment:
 
-    activate facet36
+        activate facet36
 
 Now the prompt should display: 
 
-    (facet36) C:\chesapeake_bay\FACET>
+        (facet36) C:\chesapeake_bay\FACET>
 
 Now we can execute FACET code. Currently only command line execution is supported and following command line executes FACET code
 
-    (facet36) C:\chesapeake_bay\FACET>python main_dev.py
+        (facet36) C:\chesapeake_bay\FACET>python main_dev.py
