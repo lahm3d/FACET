@@ -59,8 +59,6 @@ For contributors and those who have git installed:
 
 You've successfully download FACET code and switched to latest branch
 
-Alternatively, you could simply download the FACET repository from 
-
 ### Setting up Whitebox Tools
 
 [Install WhiteboxTools](https://www.uoguelph.ca/~hydrogeo/WhiteboxTools/download.html) and [user manual](https://jblindsay.github.io/wbt_book/intro.html). At the time of writing, FACET was tested with WBT 0.12.0 but newer versions should be safe to use so please download the latest version. *Note: FACET uses WhiteboxTools (WBT), not Whitebox Geospatial Analysis Tools (GAT)* 
