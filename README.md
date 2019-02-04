@@ -80,7 +80,7 @@ Before we can execute FACET, we need to set up an environment on Anaconda so fro
 
 Now we are going to create an unique environment for FACET copy and paste the following command:
 
-        conda create -n facet36 python=3.6 fiona geopandas jenkspy matplotlib numpy pandas rasterio scipy shapely
+        conda create -f c:\chesapeake_bay\FACET\facet36_2019.04.02.yml
 
 This creates a new environment called `facet36` and all the relevant packages needed. Next step is to activate the environment and run FACET
 
