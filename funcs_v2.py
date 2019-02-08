@@ -373,40 +373,48 @@ def taudem_gagewatershed(str_pts_path, str_d8fdr_path):
 # ==========================================================================         
 def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
     print('Clipping streamlines to site DEM...')
-#    # Build the output file name...
-#    path_to_dem, dem_filename = os.path.split(str_dem_path)
-#    output_filename = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp'
     
-    # Polygonize the raster DEM with rasterio...    
+    tmp = os.path.dirname(str_dem_path) + "/mask.tif" # tmp DEM mask
+    
+    # convert DEM to binary raster  
     with rasterio.open(str(str_dem_path)) as ds_dem:
         arr_dem = ds_dem.read(1)
-  
-    arr_dem[arr_dem>0] = 100
-    mask = arr_dem == 100
-   
-    results = (
-        {'properties': {'test': v}, 'geometry': s}
-        for i, (s, v) 
-        in enumerate(
-            shapes(arr_dem, mask=mask, transform=ds_dem.transform)))
-    
+        profile = dict(ds_dem.profile)
+
+    #update profile
+    profile['dtype'] ='uint8'
+    profile['nodata'] = 0
+    arr_dem = (arr_dem != ds_dem.nodata).astype(np.uint8) # all nodata values = 1
+
+    # write out binary raster
+    with rasterio.open(tmp, 'w', **profile) as dst:
+        dst.write(arr_dem, 1)
+
+    # Polygonize binary raster
+    mask = None
+    with rasterio.open(tmp) as src:
+        image = src.read(1) 
+        results = (
+        {'properties': {'raster_val': v}, 'geometry': s}
+        for i, (s, v) in enumerate(
+            shapes(image, mask=mask, transform=src.transform)))
+
     poly = next(results)   
     poly_shp = shape(poly['geometry'])    
 
+
     # Now clip/intersect the streamlines file with results via Shapely...
     with fiona.open(str_lines_path) as lines:
-        
         # Get the subset that falls within bounds of polygon...        
         subset = lines.filter(bbox=shape(poly['geometry']).bounds)
         lines_schema = lines.schema
-        lines_crs = lines.crs
-        
+        lines_crs = lines.crs     
         with fiona.open(output_filename, 'w', 'ESRI Shapefile', lines_schema, lines_crs) as dst:
-        
             for line in subset:  
                 if shape(line['geometry']).within(poly_shp):
                     dst.write(line)
 
+    os.remove(tmp)
     return output_filename
 
 # ===============================================================================
