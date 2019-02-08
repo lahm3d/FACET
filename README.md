@@ -23,7 +23,7 @@ Identifying Floodplain Extent using Height Above Nearest Drainage (HAND)
 
 # Setting up FACET (***Work in progress***)
 
-FACET neeeds following programs before getting started:
+## Requirements:
  
  * Anaconda (Python 3.6)
  * WhiteboxTools (*not Whitebox GAT*)
@@ -36,10 +36,14 @@ FACET neeeds following programs before getting started:
 
 ## 2. Set-up:
 
-Determine where the FACET is going to reside on your computer and navigate to that path. In this tutorial, we are going to set up FACET
-under `c:\chesapeake_bay` (***needs to be manually created by the user***)
+First, identify where you are going to store FACET code and the data. In this tutorial, the code and data will be saved under `c:\chesapeake_bay`, if it doesn't exist please create it. 
 
-Simpler method: FACET can be downloaded directly from GitHub [here](https://github.com/lahm3d/FACET/archive/develop.zip) (***make sure to select develop branch***), unzip and place it under `c:\cheaspeake_bay` folder
+**How to get FACET code?** 
+
+There are two methods to get the code
+
+1. Easiest method : FACET can be downloaded directly from GitHub [here](https://github.com/lahm3d/FACET/archive/develop.zip) (***make sure to select develop branch***), unzip and place it under `c:\cheaspeake_bay` folder
+2. Get FACET from git (see instructions below)
 
 
 For contributors and those who have git installed:
@@ -59,22 +63,24 @@ For contributors and those who have git installed:
 
 You've successfully download FACET code and switched to latest branch
 
+## 3. Anaconda and Whitebox Tools
+
 ### Setting up Whitebox Tools
 
-[Install WhiteboxTools](https://www.uoguelph.ca/~hydrogeo/WhiteboxTools/download.html) and [user manual](https://jblindsay.github.io/wbt_book/intro.html). At the time of writing, FACET was tested with WBT 0.12.0 but newer versions should be safe to use so please download the latest version. *Note: FACET uses WhiteboxTools (WBT), not Whitebox Geospatial Analysis Tools (GAT)* 
+[Install WhiteboxTools](https://www.uoguelph.ca/~hydrogeo/WhiteboxTools/download.html) and [user manual](https://jblindsay.github.io/wbt_book/intro.html). Download the latest version of WBT. *Note: FACET uses WhiteboxTools (WBT), not Whitebox Geospatial Analysis Tools (GAT)* 
 
 Unzip `WhiteboxTools_win_amd64.zip` and extract the `WBT` folder under `c:\cheaspeake_bay`
 
-The file structure should look something like this:
+The file structure should look like this:
        
         c:\
         └── chesapeake_bay
             ├── FACET
             └── WBT
 
-### Setting up Anaconda and running FACET
+### Setting up Anaconda
 
-Before we can execute FACET, we need to set up an environment on Anaconda so from Window's Start button find and launch 'Anaconda Prompt'. Next navigate to `c:\chesapeake_bay\FACET` folder
+Open Window's Start button, type 'Anaconda Prompt' and launch the prompt. Next type in the following cmd line to navigate to `c:\chesapeake_bay\FACET` folder
 
         cd c:\chesapeake_bay\FACET
 
@@ -96,6 +102,70 @@ Now the prompt should display:
 
         (facet36) C:\chesapeake_bay\FACET>
 
-Now we can execute FACET code. Currently only command line execution is supported and following command line executes FACET code
+This means you've successfully activated FACET environment and this is where you will be running FACET.
+
+## 4. Configuration file and data structure
+
+### Configuration file
+
+Under FACET folder you should see `config.ini` file and it can be opened in any text editor. At present, we recommend modifying the configurations under `[paths and flags]` and leaving other values as defaults. In future, additional documentation and usage on other parameters and variables will be provided. 
+
+`.INI` syntax instructions are provided in the file as well. Lastly, carefully review the file before executing FACET code.
+
+        #*****************************************************************#
+        # Module Name: config.ini                                         #
+        # Type       : FACET configuration file                           #
+        # Function   : Define the configuration of a FACET run            #
+        # for comments use ; or # and no in-line comments                 #
+        # values can be assigned using = or :                             #
+        # for paths use \\ or / -- do not use \                           #
+        #*****************************************************************#
+
+        [reach and order]
+        reach_id : LINKNO
+        order_id : strmOrder
+        ; str_reachid : ARCID
+        ; str_reachid : COMID
+
+        [cross section method]
+        parm_ivert          : 0.2
+        XnPtDist            : 3
+        parm_ratiothresh    : 1.5
+        parm_slpthresh      : 0.03
+        p_fpxnlen           : 100
+        ; p_buffxnlen       : 30
+        ; p_xngap           : 3
+
+        [width from curvature via buff. method]
+        use_wavelet_curvature_method : False
+        i_step      : 100
+        max_buff    : 30
+
+        [paths and flags]
+        mpi_path    : C:\\Program Files\\Microsoft MPI\\Bin\\mpiexec.exe
+        taudem_path : C:\\Program Files\\TauDEM\\TauDEM5Exe
+        wbt_path    : D:\\git_projects\\FACET\\WBT
+        whitebox    : True
+        wt_grid     : True
+        taudem      : True
+        huc04_dir   : c:\\chesapeake_bay\\sample_data
+
+### FACET File Structure
+
+Below is sample directory structure for FACET data. Additionally, users can download [sample data](https://drive.google.com/file/d/1lS-6UgkDmnrGUD849ySZ8h9MDiNZeFoJ/view?usp=sharing) test the FACET tool
+
+        c:\
+        └── chesapeake_bay
+            ├── FACET
+            ├── sample_data
+            |      └── 0206
+            |           ├── 0206.shp
+            |           └── 0206000403
+            |                   └── 0206000403_dem.tif
+            └── WBT
+
+Under `sample_data` there can be one or more folders named by HUC 4 values and within each HUC 4 folder there should be a NHD hi-resolution streams 1:24k feature layer, and one or more HUC 10 and HUC 12 folders. Inside each HUC 10 or 12 folder there should be a DEM GeoTIFF.
+
+After successfully modifying the config file and organizing the data folder, we are ready to run the FACET code. At present, FACET is best executed using command line.
 
         (facet36) C:\chesapeake_bay\FACET>python main_dev.py
