@@ -118,7 +118,7 @@ Under FACET folder you should see `config.ini` file and it can be opened in any 
         # Function   : Define the configuration of a FACET run            #
         # for comments use ; or # and no in-line comments                 #
         # values can be assigned using = or :                             #
-        # for paths use \\ or / -- do not use \                           #
+        # for paths use / -- do not use \ or \\                           #
         #*****************************************************************#
 
         [reach and order]
@@ -142,13 +142,13 @@ Under FACET folder you should see `config.ini` file and it can be opened in any 
         max_buff    : 30
 
         [paths and flags]
-        mpi_path    : C:\\Program Files\\Microsoft MPI\\Bin\\mpiexec.exe
-        taudem_path : C:\\Program Files\\TauDEM\\TauDEM5Exe
-        wbt_path    : D:\\git_projects\\FACET\\WBT
+        mpi_path    : C:/Program Files/Microsoft MPI/Bin/mpiexec.exe
+        taudem_path : C:/Program Files/TauDEM/TauDEM5Exe
+        wbt_path    : D:/git_projects/FACET/WBT
         whitebox    : True
         wt_grid     : True
         taudem      : True
-        huc04_dir   : c:\\chesapeake_bay\\sample_data
+        huc04_dir   : D:/git_projects/sample_data
 
 ### FACET File Structure
 
