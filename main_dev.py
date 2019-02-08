@@ -12,23 +12,71 @@ import os
 import fnmatch
 import sys
 import pandas as pd
+import configparser
+from pathlib import Path
 
 #from functools import partial
 #import multiprocessing
 
-import funcs_v2 
+import funcs_v2
+import config
 
 
-        
 if __name__ == '__main__':    
     
     print('\n<<< Start >>>\r\n')
-    start_time_0 = timeit.default_timer()    
-            
+    start_time_0 = timeit.default_timer()
+
+    # read in config file
+    config_file = config.get_config_path()
+    Config = configparser.ConfigParser()
+    Config.read(config_file)
+
+    # << PARAMETERS >>  
+    str_reachid = Config['reach and order']['reach_id']
+    str_orderid = Config['reach and order']['order_id']
+
+    ## Cross section method:
+    parm_ivert       = Config['cross section method']['parm_ivert']  # 0.2 default
+    XnPtDist         = Config['cross section method']['XnPtDist']  # 3 is default  Step along Xn length for interpolating elevation
+    parm_ratiothresh = Config['cross section method']['parm_ratiothresh']  # 1.5 default
+    parm_slpthresh   = Config['cross section method']['parm_slpthresh']  # 0.03 default
+    p_fpxnlen        = Config['cross section method']['p_fpxnlen']  # 2D cross-section method (assign by order?)
+    # p_buffxnlen    = Config['cross section method']['p_buffxnlen']  # meters (if UTM) ?? (cross section length) Now defined in write_xns_shp
+    # p_xngap        = Config['cross section method']['p_xngap']  # 3 default  (spacing between cross sections)
+
+    ## Width from curvature via buffering method:
+    use_wavelet_curvature_method = Config['width from curvature via buff. method']['use_wavelet_curvature_method']
+    i_step   = Config['width from curvature via buff. method']['i_step'] # length of reach segments for measuring width from bank pixels (and others?)
+    max_buff = Config['width from curvature via buff. method']['max_buff'] # maximum buffer length for measuring width based on pixels  
+
+    ## Preprocessing paths and Flags specifying what to run:
+    str_mpi_path      = Config['paths and flags']['mpi_path']
+    str_taudem_dir    = Config['paths and flags']['taudem_path']
+    str_whitebox_path = Config['paths and flags']['wbt_path']   
+    run_whitebox      = Config['paths and flags']['whitebox']   # Run Whitebox-BreachDepressions?
+    run_wg            = Config['paths and flags']['wt_grid']    # Run create weight grid by finding start points from a given streamlines layer?
+    run_taudem        = Config['paths and flags']['taudem']     # Run TauDEM functions?    
+    
+    # print(str_reachid)
+    # print(str_orderid)
+    # print(parm_ivert)
+    # print(XnPtDist)
+    # print(parm_ratiothresh)
+    # print(parm_slpthresh)
+    # print(p_fpxnlen)
+    # print(use_wavelet_curvature_method)
+    # print(i_step)
+    # print(max_buff)
+    # print(str_mpi_path)
+    # print(str_taudem_dir)
+    # print(str_whitebox_path)
+    # print(run_whitebox)
+    # print(run_wg)
+    # print(run_taudem)
+    """
     # << PARAMETERS >>  
     str_reachid='LINKNO'
-#    str_reachid='ARCID'
-#    str_reachid='COMID'
     str_orderid='strmOrder'
     
     ## Cross section method:
@@ -46,55 +94,64 @@ if __name__ == '__main__':
     max_buff = 30 # maximum buffer length for measuring width based on pixels  
     
     ## Preprocessing paths and parameters:
-    str_mpi_path=r'C:\Program Files\Microsoft MPI\Bin\mpiexec.exe'
-    str_taudem_dir=r'C:\Program Files\TauDEM\TauDEM5Exe' #\D8FlowDir.exe"'
-    # str_whitebox_path= r"C:\whitebox_gat\gospatial\go-spatial_win_amd64.exe" # Go version
-    str_whitebox_path= r"D:\git_projects\FACET\WBT" # WBT 0.12 version
-    # str_whitebox_path= r"D:\git_projects\FACET_misc\white_box_go_spatial\go-spatial_win_amd64.exe" # Go version
+    str_mpi_path      = r'C:\Program Files\Microsoft MPI\Bin\mpiexec.exe'
+    str_taudem_dir    = r'C:\Program Files\TauDEM\TauDEM5Exe' #\D8FlowDir.exe"'
+    str_whitebox_path = r"D:\git_projects\FACET\WBT" # WBT 0.12 version
   
     ## Flags specifying what to run:
-    run_whitebox = True  # Run Whitebox-BreachDepressions?
-    run_wg = True       # Run create weight grid by finding start points from a given streamlines layer?
-    run_taudem = True   # Run TauDEM functions?    
-
+    run_whitebox    = True  # Run Whitebox-BreachDepressions?
+    run_wg          = True       # Run create weight grid by finding start points from a given streamlines layer?
+    run_taudem      = True   # Run TauDEM functions?    
+    """
     #=============================================================================================== 
     #                             BEGIN BULK PROCESSING LOOP
     #===============================================================================================    
     
     ## << FOR BULK PROCESSING >>
     ## Specify path to root:
-    lst_paths = glob.glob(r"F:\facet\CFN_CB_HUC10\*")[1]
-    lst_paths = [lst_paths]
-    lst_paths.sort() # for testing
+    huc04_dir = Config['paths and flags']['huc04_dir']
+    # huc10_dir = Config['paths and flags']['huc10_dir']
+    # huc12_dir = Config['paths and flags']['huc12_dir']
+
+    # if huc04_dir:
+    #     lst_paths = glob.glob(f"{huc04_dir}\\*")
+    # elif huc10_dir:
+    #     huc10_p = Path()
+    #     lst_paths = glob.glob(f"{huc04_dir}\\*")
+
+    lst_paths = glob.glob(f"{huc04_dir}\\*")
+    # lst_paths = [lst_paths]
+    # lst_paths.sort() # for testing
 
     #===============================================================================================   
     #                           Chesapeake file structure:
     #===============================================================================================   
     for i, path in enumerate(lst_paths):
-        str_nhdhr_huc4 = glob.glob(path + '\*.shp')[0] # F:\facet\CFN_CB_HUC10\0206\0206.shp
-        
+        str_nhdhr_huc4 = glob.glob(path + '\*.shp')[0] # Z:\facet\CFN_CB_HUC10\0206\0206.shp
+
         ## Reproject the nhdhr lines to same as DEM:
         dst_crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'      
         # dst_crs="+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"
         # dst_crs = "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 
         ## Re-project the NHD to match the DEM:
-        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)  # F:\facet\CFN_CB_HUC10\0205\0205_proj.shp       
-        # str_nhdhr_huc4_proj = r'F:\facet\CFN_CB_HUC10\0206\0206_proj.shp'
+        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp       
+        # str_nhdhr_huc4_proj = r'D:\git_projects\sample_data\0206\0206_proj.shp'
         for root, dirs, files in os.walk(path):
+            hucID = root.split('\\')[-1:][0] # huc10 or huc12
             try:
-                str_huc = fnmatch.filter(files, '*.shp')[0]
-                str_dem = fnmatch.filter(files, '*.tif')[0]
+                # str_huc = fnmatch.filter(files, '*.shp')[0]
+                str_dem = fnmatch.filter(files, f'{hucID}_dem.tif')[0]
             except:
                 continue
 
             # HUC IDs
-            """ HUC12 ids for naming files:       
-                huc12 = root[27:] # assuming huc4 dir with huc10 dirs"""
-            huc12 = root.split('\\')[-1:][0] # 0206000603
+            """ HUC_id for naming files:       
+                huc_id = root[27:] # assuming huc4 dir with huc10 dirs"""
+            # hucID = root.split('\\')[-1:][0] # 0206000603
             
             ## Get the DEM and HUC10 poly mask file paths:
-            str_dem_path = root + '\\' + str_dem # F:\facet\CFN_CB_HUC10\0206\0206000603\0206000603_dem.tif
+            str_dem_path = root + '\\' + str_dem # Z:\facet\CFN_CB_HUC10\0206\0206000603\0206000603_dem.tif
 
             ## Assign a name for the clipped NHD-HR HUC10 file:
             path_to_dem, dem_filename = os.path.split(str_dem_path)
@@ -104,19 +161,20 @@ if __name__ == '__main__':
             name, ext = str_dem.split('.')
             dst_file = os.path.join(root, f"{name}_proj.{ext}")
             str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, dst_crs, dst_file, resolution=(3.0, 3.0))
-            ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
-            funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj) 
 
+            ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
+
+            funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj) 
             ## Call preprocessing function:
             funcs_v2.preprocess_dem(str_dem_path_proj, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)
             
             #### start of post-processing steps(???)
-            # root is F:\facet\CFN_CB_HUC10\0206\0206000603\
-            str_dem_path          = os.path.join(root,f'{huc12}_dem_proj.tif')
-            str_breached_dem_path = os.path.join(root,f'{huc12}_dem_breach_proj.tif')
-            str_hand_path         = os.path.join(root,f'{huc12}_dem_breach_hand.tif')
-            str_net_path          = os.path.join(root,f'{huc12}_breach_net.shp')    
-            # str_sheds_path        = os.path.join(root,f'{huc12}_w.shp')
+            # root is Z:\facet\CFN_CB_HUC10\0206\0206000603\
+            str_dem_path          = os.path.join(root,f'{hucID}_dem_proj.tif')
+            str_breached_dem_path = os.path.join(root,f'{hucID}_dem_breach_proj.tif')
+            str_hand_path         = os.path.join(root,f'{hucID}_dem_breach_hand.tif')
+            str_net_path          = os.path.join(root,f'{hucID}_breach_net.shp')    
+            # str_sheds_path        = os.path.join(root,f'{hucID}_w.shp')
 
             # print (str_dem_path)
             # print (str_breached_dem_path)
@@ -124,29 +182,29 @@ if __name__ == '__main__':
             # print (str_net_path)
 
             # do i need to reference here? 
-            # p           = os.path.join(root, f'{huc12}_breach_p.tif')
-            # sd8         = os.path.join(root, f'{huc12}_breach_sd8.tif')
-            # ad8_wg      = os.path.join(root, f'{huc12}_breach_ad8_wg.tif')
-            # ad8_no_wg   = os.path.join(root, f'{huc12}_breach_ad8_no_wg.tif')
-            # ord_g       = os.path.join(root, f'{huc12}_breach_ord_g.tif')
-            # tree        = os.path.join(root, f'{huc12}_breach_tree')
-            # coord       = os.path.join(root, f'{huc12}_breach_coord')
-            # net         = os.path.join(root, f'{huc12}_breach_net.shp')
-            # w           = os.path.join(root, f'{huc12}_breach_w.tif')
-            # slp         = os.path.join(root, f'{huc12}_breach_slp.tif')
-            # ang         = os.path.join(root, f'{huc12}_breach_ang.tif')
-            # dd          = os.path.join(root, f'{huc12}_breach_hand.tif')
+            # p           = os.path.join(root, f'{hucID}_breach_p.tif')
+            # sd8         = os.path.join(root, f'{hucID}_breach_sd8.tif')
+            # ad8_wg      = os.path.join(root, f'{hucID}_breach_ad8_wg.tif')
+            # ad8_no_wg   = os.path.join(root, f'{hucID}_breach_ad8_no_wg.tif')
+            # ord_g       = os.path.join(root, f'{hucID}_breach_ord_g.tif')
+            # tree        = os.path.join(root, f'{hucID}_breach_tree')
+            # coord       = os.path.join(root, f'{hucID}_breach_coord')
+            # net         = os.path.join(root, f'{hucID}_breach_net.shp')
+            # w           = os.path.join(root, f'{hucID}_breach_w.tif')
+            # slp         = os.path.join(root, f'{hucID}_breach_slp.tif')
+            # ang         = os.path.join(root, f'{hucID}_breach_ang.tif')
+            # dd          = os.path.join(root, f'{hucID}_breach_hand.tif')
 
 
             # output paths
-            str_csv_path        = os.path.join(root, f'{huc12}.csv')
-            str_chxns_path      = os.path.join(root, f'{huc12}_breach_chxns.shp')       
-            str_bankpts_path    = os.path.join(root, f'{huc12}_breach_bankpts.shp')
-            str_chanmet_segs    = os.path.join(root, f'{huc12}_breach_net_ch_width.shp')
-            str_bankpixels_path = os.path.join(root, f'{huc12}_breach_bankpixels.tif')        
-            str_fpxns_path      = os.path.join(root, f'{huc12}_breach_fpxns.shp')
-            str_fim_path        = os.path.join(root, f'{huc12}_breach_dem_breach_hand_3sqkm_fim.tif')        
-            str_comp_path       = os.path.join(root, f'{huc12}_breach_dem_breach_comp.tif')
+            str_csv_path        = os.path.join(root, f'{hucID}.csv')
+            str_chxns_path      = os.path.join(root, f'{hucID}_breach_chxns.shp')       
+            str_bankpts_path    = os.path.join(root, f'{hucID}_breach_bankpts.shp')
+            str_chanmet_segs    = os.path.join(root, f'{hucID}_breach_net_ch_width.shp')
+            str_bankpixels_path = os.path.join(root, f'{hucID}_breach_bankpixels.tif')        
+            str_fpxns_path      = os.path.join(root, f'{hucID}_breach_fpxns.shp')
+            str_fim_path        = os.path.join(root, f'{hucID}_breach_dem_breach_hand_3sqkm_fim.tif')        
+            str_comp_path       = os.path.join(root, f'{hucID}_breach_dem_breach_comp.tif')
 
             # << GET CELL SIZE >>
             cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
@@ -155,7 +213,6 @@ if __name__ == '__main__':
             df_coords = pd.read_csv(str_csv_path,)
 
             print(df_coords.head(6))
-
 
             # ============================= << CROSS SECTION ANALYSES >> =====================================
             # << CREATE Xn SHAPEFILES >>
