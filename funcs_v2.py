@@ -7,6 +7,7 @@ Created on Wed Dec  7 14:51:45 2016
 #import pprint # neat!
 
 #import math
+import itertools
 import subprocess
 #import timeit
 import numpy as np
@@ -40,10 +41,12 @@ import rasterio.features
 #from affine import Affine
 import pandas as pd
 import geopandas as gpd
+from geopandas.tools import sjoin
 #from scipy import ndimage
 #from shapely.geometry import Point, 
 from shapely.geometry import shape, mapping, LineString, MultiLineString, Point, MultiPoint
 from shapely.ops import split
+from shapely.ops import unary_union
 #from jenks import jenks
 #from PyQt4 import QtGui, QtCore
 
@@ -416,6 +419,78 @@ def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
 
     os.remove(tmp)
     return output_filename
+
+# ==========================================================================
+#   Polygonize watersheds  
+# ==========================================================================         
+def watershed_polygonize(in_tif, out_shp):
+    print ("Polygonizing watersheds...")
+    # tmp = "D:\\git_projects\\sample_data\\0206\\0206000403\\0206000403_breach_w_temp.shp" # tmp file
+    tmp = os.path.dirname(in_tif) + "\\breach_w_tmp.shp" # tmp DEM mask
+
+    # convert the raster to polygon
+    mask = None
+    with rasterio.open(in_tif) as src:
+        image = src.read(1) 
+        results = (
+            {'properties': {'raster_val': v}, 'geometry': s}
+            for i, (s, v) in enumerate(
+                shapes(image, mask=mask, transform=src.transform)))
+
+    # write raster vals to polygon
+    driver = 'Shapefile'
+    crs = src.crs
+    schema = {'properties': [('raster_val', 'int')], 'geometry': 'Polygon'}
+    with fiona.open(tmp, 'w', driver=driver, crs=crs, schema=schema) as dst:
+        dst.writerecords(results)
+
+    # original sauce: https://gis.stackexchange.com/questions/149959/dissolving-polygons-based-on-attributes-with-python-shapely-fiona
+    # dissolve and remove nodata vals
+    with fiona.open(tmp) as input:
+        meta = input.meta # copy tmp files metadata
+        with fiona.open(out_shp, 'w', **meta) as output:
+            # sort and then perform groupby on raster_vals
+            by_vals = sorted(input, key=lambda k: k['properties']['raster_val'])
+            # group by 'raster_val' 
+            for key, group in itertools.groupby(by_vals, key=lambda x:x['properties']['raster_val']):
+                properties, geom = zip(*[(feature['properties'],shape(feature['geometry'])) for feature in group])
+                # perform check and exclude nodata value
+                if properties[0]['raster_val'] >= 0:
+                    # write the feature, computing the unary_union of the elements in the group with the properties of the first element in the group
+                    output.write({'geometry': mapping(unary_union(geom)), 'properties': properties[0]})
+
+    os.remove(tmp) # delete temp file
+
+# ==========================================================================
+#   join watersheds attributes
+# ==========================================================================      
+def join_watershed_attrs(w, physio, net, output):
+    # 1 - read in watershed polygons
+    wsheds = gpd.read_file(w) # watershed grid shp
+    points = wsheds.copy() #
+    # 2 - polygons to centroid points
+    points.geometry = points['geometry'].centroid # get centroids
+    points.crs = wsheds.crs # copy poly crs
+    # 3 -  spatial join points to physiographic regions
+    physio = gpd.GeoDataFrame.from_file(physio)
+    pointsInPhysio = sjoin(points, physio, how='left') # spatial join
+
+    # 4 - merge attrs to watershed polygons
+    net = gpd.GeoDataFrame.from_file(net) 
+
+    # 4.1 - rename columns
+    wsheds = wsheds.rename(columns={'raster_val':'LINKNO'})
+    pointsInPhysio = pointsInPhysio.rename(columns={'raster_val':'LINKNO'})
+
+    # 4.2 - drop geometry from pointsInPhysio & net files
+    pointsInPhysio = pointsInPhysio.drop(['geometry'], axis=1)
+    net = net.drop(['geometry'], axis=1)
+
+    # 4.3 - merge pointsInPhysio & net files to wsheds
+    wshedsMerge = wsheds.merge(pointsInPhysio, on='LINKNO') # merge 1
+    wshedsMerge = wshedsMerge.merge(net, on='LINKNO') # merge 2
+
+    wshedsMerge.to_file(output)
 
 # ===============================================================================
 #  Callback for GoSpatial tool messages
@@ -947,6 +1022,12 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
                 message = message + line
                 
             print(message)
+
+            # polygonize watersheds
+            watershed_polygonize(w, w_shp)
+
+            # create watershed polys with physiographic attrs
+            join_watershed_attrs(w_shp, physio, net, wshed_physio)
 
     except:
         print("Unexpected error:", sys.exc_info()[0])

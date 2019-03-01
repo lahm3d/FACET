@@ -57,7 +57,8 @@ if __name__ == '__main__':
     run_whitebox      = Config['paths and flags']['whitebox']   # Run Whitebox-BreachDepressions?
     run_wg            = Config['paths and flags']['wt_grid']    # Run create weight grid by finding start points from a given streamlines layer?
     run_taudem        = Config['paths and flags']['taudem']     # Run TauDEM functions?    
-    
+    physio            = Config['paths and flags']['physio']
+
     # print(str_reachid)
     # print(str_orderid)
     # print(parm_ivert)
