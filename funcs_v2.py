@@ -1380,7 +1380,7 @@ def fim_hand_poly(str_hand_path, str_sheds_path, str_reachid):
             for shed in sheds:
                 
                 # Get the linkno...
-                linkno = shed['properties']['gridcode']
+                linkno = shed['properties']['LINKNO']
                 
                 # Get the Province...
                 prov = shed['properties']['PROVINCE']
