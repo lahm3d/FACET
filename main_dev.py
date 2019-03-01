@@ -37,18 +37,18 @@ if __name__ == '__main__':
     str_orderid = Config['reach and order']['order_id']
 
     ## Cross section method:
-    parm_ivert       = Config['cross section method']['parm_ivert']  # 0.2 default
-    XnPtDist         = Config['cross section method']['XnPtDist']  # 3 is default  Step along Xn length for interpolating elevation
-    parm_ratiothresh = Config['cross section method']['parm_ratiothresh']  # 1.5 default
-    parm_slpthresh   = Config['cross section method']['parm_slpthresh']  # 0.03 default
-    p_fpxnlen        = Config['cross section method']['p_fpxnlen']  # 2D cross-section method (assign by order?)
+    parm_ivert       = float(Config['cross section method']['parm_ivert'])  # 0.2 default
+    XnPtDist         = int(Config['cross section method']['XnPtDist'])  # 3 is default  Step along Xn length for interpolating elevation
+    parm_ratiothresh = float(Config['cross section method']['parm_ratiothresh'])  # 1.5 default
+    parm_slpthresh   = float(Config['cross section method']['parm_slpthresh'])  # 0.03 default
+    p_fpxnlen        = int(Config['cross section method']['p_fpxnlen'])  # 2D cross-section method (assign by order?)
     # p_buffxnlen    = Config['cross section method']['p_buffxnlen']  # meters (if UTM) ?? (cross section length) Now defined in write_xns_shp
     # p_xngap        = Config['cross section method']['p_xngap']  # 3 default  (spacing between cross sections)
 
     ## Width from curvature via buffering method:
     use_wavelet_curvature_method = Config['width from curvature via buff. method']['use_wavelet_curvature_method']
-    i_step   = Config['width from curvature via buff. method']['i_step'] # length of reach segments for measuring width from bank pixels (and others?)
-    max_buff = Config['width from curvature via buff. method']['max_buff'] # maximum buffer length for measuring width based on pixels  
+    i_step   = int(Config['width from curvature via buff. method']['i_step']) # length of reach segments for measuring width from bank pixels (and others?)
+    max_buff = int(Config['width from curvature via buff. method']['max_buff']) # maximum buffer length for measuring width based on pixels  
 
     ## Preprocessing paths and Flags specifying what to run:
     str_mpi_path      = Config['paths and flags']['mpi_path']
