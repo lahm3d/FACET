@@ -1424,7 +1424,7 @@ def fim_hand_poly(str_hand_path, str_sheds_path, str_reachid):
                     bounds = rasterio.transform.array_bounds(shp[0],shp[1],out_transform) # window bounds in x-y space (west, south, east, north)                                
 
     #                col_min, row_min = ~ds_hand.transform * (bounds[0], bounds[3]) # RAsterio v1.x upper left row and column of window?                                
-                    col_min, row_min = ~ds_hand.affine * (bounds[0], bounds[3])
+                    col_min, row_min = ~ds_hand.transform * (bounds[0], bounds[3])
                     
                     row_min = np.int(row_min)                            
                     col_min = np.int(col_min)
