@@ -686,82 +686,58 @@ def run_rust_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback = de
 #   1. Breaching and filling
 #   2. TauDEM functions
 # ===============================================================================        
-def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_whitebox, run_wg, run_taudem):
+def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID):
     try:
-        
-        # Split DEM path and filename...  # NOT OS INDEPENDENT??
-        path_to_dem, dem_filename = os.path.split(str_dem_path)
-#        F:\facet\CFN_CB_HUC10\0206\0206000603 0206000603_dem_proj.tif
-        
-        dem_filename = str(dem_filename).split('_')[0] # 0206000603_dem
-        ## Set this for a custom output folder:
-#        path_to_dem = '/home/sam/drb_preprocess_2018.08.28'
-
         inputProc = str(2) # number of cores to use for TauDEM processes
                
         # << Define all filenames here >>
-        str_danglepts_path = os.path.join(path_to_dem, dem_filename + '_wg.tif')
-        
-        dem_filename_tif = f"{dem_filename}_proj.tif" #'0206000603_dem_proj.tif
-        breach_filename_dep = f"{dem_filename}_breach.dep"
-        breach_filename_tif = f"{dem_filename}_breach.tif"
-        breach_filepath_tif = os.path.join(path_to_dem, breach_filename_tif)
-        breach_filepath_tif_tmp = breach_filepath_tif[:-4] + '_tmp_proj.tif'
-        breach_filepath_tif_proj = breach_filepath_tif[:-4] + '_proj.tif'
-        
-#        str_dem_path_tif = os.path.join(path_to_dem + '/' + dem_filename[:-4]+'.tif')
-        str_dem_path_tif = str_dem_path
-        
-        
-#        fel = path_to_dem + '\\' + dem_filename[:-4]+'_breach.tif'
-        
-        p = os.path.join(path_to_dem,breach_filename_tif[:-4]+'_p.tif')
-        sd8 = os.path.join(path_to_dem,breach_filename_tif[:-4]+'_sd8.tif')
-        
-        ad8_wg = os.path.join(path_to_dem,breach_filename_tif[:-4]+'_ad8_wg.tif')
-        wtgr = os.path.join(str_danglepts_path)
-        ad8_no_wg = os.path.join(path_to_dem,breach_filename_tif[:-4]+'_ad8_no_wg.tif')
-        ord_g = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_ord_g.tif')
-        tree = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_tree')
-        coord =os.path.join(path_to_dem, breach_filename_tif[:-4]+'_coord')
-        net = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_net.shp')
-        w = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_w.tif')
-        slp = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_slp.tif')
-        ang = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_ang.tif')
-        dd = os.path.join(path_to_dem, breach_filename_tif[:-4]+'_hand.tif')
-        
-#        print ("01", path_to_dem)	                
-#        print ("02", dem_filename)	            
-#        print ("03", dem_filename)	            
-#        print ("04", str_danglepts_path)	      
-#        print ("05", dem_filename_tif)	        
-#        print ("06", breach_filename_dep)	        
-#        print ("07", breach_filename_tif)	        
-#        print ("08", breach_filepath_tif)	        
-#        print ("09", breach_filepath_tif_proj)	
-#        print ("10", str_dem_path_tif)	        
-#        print ("11", p)	                        
-#        print ("12", sd8)	                        
-#        print ("13", ad8_wg)	                    
-#        print ("14", wtgr)	                    
-#        print ("15", ad8_no_wg)	                
-#        print ("16", ord_g)	                    
-#        print ("17", tree)	                    
-#        print ("18", coord)	                    
-#        print ("19", net)	                        
-#        print ("20", w)	                        
-#        print ("21", slp)	                        
-#        print ("22", ang)	                        
-#        print ("23", dd)	
+        str_dem_path             = os.path.join(root, f'{hucID}_dem_proj.tif')
+        breach_filepath_tif_tmp  = os.path.join(root, f'{hucID}_breach_tmp_proj.tif')
+        breach_filepath_tif_proj = os.path.join(root, f'{hucID}_breach_proj.tif')
+        breach_filepath_dep      = os.path.join(root, f'{hucID}_breach.dep')
+
+        str_danglepts_path = os.path.join(root, f'{hucID}_wg.tif')
+        p                  = os.path.join(root, f'{hucID}_breach_p.tif')
+        sd8                = os.path.join(root, f'{hucID}_breach_sd8.tif')
+        ad8_wg             = os.path.join(root, f'{hucID}_breach_ad8_wg.tif')
+        ad8_no_wg          = os.path.join(root, f'{hucID}_breach_ad8_no_wg.tif')
+        ord_g              = os.path.join(root, f'{hucID}_breach_ord_g.tif')
+        tree               = os.path.join(root, f'{hucID}_breach_tree')
+        coord              = os.path.join(root, f'{hucID}_breach_coord')
+        net                = os.path.join(root, f'{hucID}_breach_net.shp')
+        w                  = os.path.join(root, f'{hucID}_breach_w.tif')
+        w_shp              = os.path.join(root, f'{hucID}_breach_w.shp')
+        slp                = os.path.join(root, f'{hucID}_breach_slp.tif')
+        ang                = os.path.join(root, f'{hucID}_breach_ang.tif')
+        dd                 = os.path.join(root, f'{hucID}_breach_hand.tif')
+        wshed_physio       = os.path.join(root, f'{hucID}_breach_w_diss_physio.shp')
+
+        # print ("01", str_dem_path)	                
+        # print ("02", breach_filepath_tif_tmp)	            
+        # print ("03", breach_filepath_tif_proj)	            
+        # print ("04", breach_filepath_dep)	      
+        # print ("05", str_danglepts_path) 
+        # print ("11", p)	                        
+        # print ("12", sd8)	                        
+        # print ("13", ad8_wg)	                    
+        # print ("15", ad8_no_wg)	                
+        # print ("16", ord_g)	                    
+        # print ("17", tree)	                    
+        # print ("18", coord)	                    
+        # print ("19", net)	                        
+        # print ("20", w)	                        
+        # print ("21", slp)	                        
+        # print ("22", ang)	                        
+        # print ("23", dd)	
 
 #        # ==================== TauDEM Paths =========================
         # Hardcode paths from user input...
-        mpipath = os.path.join(str_mpi_path) #r'"C:\Program Files\Microsoft MPI\Bin\mpiexec.exe"'
-        d8flowdir = '"' + str_taudem_path + '\D8FlowDir.exe"' # r'"C:\Program Files\TauDEM\TauDEM5Exe\D8FlowDir.exe"'
-        areaD8 = '"' + str_taudem_path + '\AreaD8.exe"'
-        streamnet = '"' + str_taudem_path + '\StreamNet.exe"'
-        dinfflowdir = '"' + str_taudem_path + '\DinfFlowDir.exe"'
-        dinfdistdown = '"' + str_taudem_path + '\DinfDistDown.exe"'        
+        mpipath         = os.path.join(str_mpi_path) #r'"C:\Program Files\Microsoft MPI\Bin\mpiexec.exe"'
+        d8flowdir       = '"' + str_taudem_path + '\D8FlowDir.exe"' # r'"C:\Program Files\TauDEM\TauDEM5Exe\D8FlowDir.exe"'
+        areaD8          = '"' + str_taudem_path + '\AreaD8.exe"'
+        streamnet       = '"' + str_taudem_path + '\StreamNet.exe"'
+        dinfflowdir     = '"' + str_taudem_path + '\DinfFlowDir.exe"'
+        dinfdistdown    = '"' + str_taudem_path + '\DinfDistDown.exe"'        
                
                 
         # ========== << 1. Breach Depressions with GoSpatial/Whitebox Tool >> ==========
@@ -783,6 +759,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
             output_WBT = f"-o={breach_filepath_tif_tmp}"
 
             exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT] + ["-v"]
+            print (exec_WBT)
             try:
                 subprocess.check_call(exec_WBT)
             except subprocess.CalledProcessError:
@@ -1006,7 +983,7 @@ def preprocess_dem(str_dem_path, str_streamlines_path, dst_crs, str_mpi_path, st
             # cmd = 'mpiexec -n ' + inputProc + ' DinfDistDown -fel ' + '"' + str_dem_path_tif + '"' + ' -ang ' + '"' + ang + '"' + \
             #       ' -src ' + '"' + ad8_wg + '"' + ' -dd ' + '"' + dd + '"' + ' -m ' + statmeth + ' ' + distmeth
 
-            cmd = f'mpiexec -n {inputProc} DinfDistDown -fel "{str_dem_path_tif}" -ang "{ang}" -src "{ad8_wg}" -dd "{dd}" -m {statmeth} {distmeth}'
+            cmd = f'mpiexec -n {inputProc} DinfDistDown -fel "{str_dem_path}" -ang "{ang}" -src "{ad8_wg}" -dd "{dd}" -m {statmeth} {distmeth}'
 
             # Submit command to operating system
             os.system(cmd)
