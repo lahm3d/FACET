@@ -209,19 +209,17 @@ if __name__ == '__main__':
 
             # ========================== << BANK PIXELS AND WIDTH FROM CURVATURE >> ====================================
             funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, cell_size, use_wavelet_curvature_method) # YES!        
-
-            funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, i_step, max_buff)        
+            funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, i_step, max_buff, str_chanmet_segs)        
 
             # ============================= << DELINEATE FIM >> =====================================
             funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path, str_reachid)
-            sys.exit(1) # code successfully runs right up to here
+
             # ============================ << FLOODPLAIN METRICS >> =====================================
-            funcs_v2.read_fp_xns_shp_and_get_dem_window(str_fpxns_path, str_dem_path, str_fim_path) 
+            funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path)
             funcs_v2.fp_metrics_chsegs(str_fim_path, str_chanmet_segs)
 
             # ==================== << HAND CHARACTERISTICS >> ===========
-            funcs_v2.hand_analysis_chsegs(str_hand_path, str_chanmet_segs, parm_ivert)
-
+            # funcs_v2.hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_raster_net_path, parm_ivert)
 
             break
         break
