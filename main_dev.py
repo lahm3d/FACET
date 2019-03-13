@@ -12,6 +12,7 @@ import os
 import fnmatch
 import sys
 import pandas as pd
+import geopandas as gpd
 import configparser
 from pathlib import Path
 
@@ -145,8 +146,8 @@ if __name__ == '__main__':
                 str_dem = fnmatch.filter(files, f'{hucID}_dem.tif')[0]
             except:
                 continue
-            
-            # directory structure
+
+           # directory structure
             str_dem_path = os.path.join(root, str_dem) # C:\...\0206000603_dem.tif
             str_nhdhr_huc10 = os.path.join(root, f'{hucID}_dem_nhdhires.shp')            
 
@@ -165,7 +166,8 @@ if __name__ == '__main__':
             str_dem_path          = os.path.join(root,f'{hucID}_dem_proj.tif')
             str_breached_dem_path = os.path.join(root,f'{hucID}_breach_proj.tif')
             str_hand_path         = os.path.join(root,f'{hucID}_breach_hand.tif')
-            str_net_path          = os.path.join(root,f'{hucID}_breach_net.shp')    
+            str_net_path          = os.path.join(root,f'{hucID}_breach_net.shp')
+            str_raster_net_path   = os.path.join(root,f'{hucID}_breach_net.tif')    
             str_sheds_path        = os.path.join(root,f'{hucID}_breach_w_diss_physio.shp')
 
             # output paths
@@ -178,6 +180,10 @@ if __name__ == '__main__':
             str_fim_path        = os.path.join(root, f'{hucID}_breach_hand_3sqkm_fim.tif')        
             str_comp_path       = os.path.join(root, f'{hucID}_breach_comp.tif')
             
+            # Convert vector streamlines to raster with pixel streamline values matching linkno:
+            gdf = gpd.read_file(str_net_path)
+            funcs_v2.rasterize_gdf(gdf, str_hand_path, str_raster_net_path, None, None)
+
             # << GET CELL SIZE >>
             cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
             df_coords, streamlines_crs = funcs_v2.get_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid) # YES!

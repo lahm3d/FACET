@@ -492,6 +492,35 @@ def join_watershed_attrs(w, physio, net, output):
 
     wshedsMerge.to_file(output)
 
+def rasterize_gdf(gdf, str_ingrid_path, str_tempgrid, str_outgrid, huc_poly):
+    '''
+    Thanks to:  https://gis.stackexchange.com/questions/151339/rasterize-a-shapefile-with-geopandas-or-fiona-python
+    '''
+    with rasterio.open(str_ingrid_path) as rst:
+        meta = rst.meta.copy()
+    meta.update(compress='lzw')
+    meta.update(dtype=rasterio.int32)
+    meta.update(nodata=0)
+
+    with rasterio.open(str_tempgrid, 'w+', **meta) as out:
+        out_arr = out.read(1)
+
+        # this is where we create a generator of geom, value pairs to use in rasterizing
+        shapes = ((geom, value) for geom, value in zip(gdf.geometry, gdf['LINKNO']))
+
+        arr_burned = rasterio.features.rasterize(shapes=shapes, fill=0, out=out_arr, transform=out.transform)
+
+        out.write_band(1, arr_burned)
+
+    #        w_pts, trans_pts = rasterio.mask.mask(ds_pts, huc_mask, crop=True, nodata=nodata, all_touched=True)
+    #        out_mask, out_trans=rasterio.mask.mask(out, [mapping(huc_poly)], crop=True, nodata=0) #, all_touched=True)
+    #        out.write_band(1, out_mask)
+    #
+    #        with rasterio.open(str_outgrid, 'w', **meta) as ds_out:
+    #            ds_out.write_band(1, out_mask[0])
+
+    return
+
 # ===============================================================================
 #  Callback for GoSpatial tool messages
 #    If a callback is not provided, it will simply print the output stream.
