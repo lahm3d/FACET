@@ -2625,30 +2625,158 @@ def chanmetrics_bankpts(df_xn_elev, str_xnsPath, str_demPath, str_bankptsPath, p
 #                sys.exit() # for testing
 
 ## ==================================================================================
-#      Floodplain Xn analysis              
-## ==================================================================================                    
-def read_fp_xns_shp_and_get_dem_window(str_xns_path, str_dem_path, str_fp_path): 
+#      Floodplain Xn analysis
+## ==================================================================================
+def read_fp_xns_shp_and_get_1D_fp_metrics(str_xns_path, str_fp_path, str_dem_path):
     '''
     1. Read Xn file with geopandas, groupby linkno
-    2. Linkno extent window like below using rasterio
-    3. For each Xn x-y pair interpolate additional points along the length with shapely
-    4. Convert to array space
-    5. Sample DEM and fp grids as numpy arrays
-    6. Calculate metrics
+    2. Get the floodplain and DEM values beneath each cross-section using rasterio.mask
+    3. Calculate metrics
+    4. Append to cross-section file and re-save
     '''
+    ## Depth:
+    lst_min_d=[]
+    lst_max_d=[]
+    lst_rng_d=[]
+    lst_mean_d=[]
+    lst_std_d=[]
+    lst_sum_d=[]
+    ## Elevation:
+    lst_min_e=[]
+    lst_max_e=[]
+    lst_rng_e=[]
+    lst_mean_e=[]
+    lst_std_e=[]
+    lst_sum_e=[]
+
+    lst_id=[]
+    lst_width=[]
+    lst_index=[]
+
     ## Read xn file:
-    print('Reading Xn file...')
+    # logger.info('Reading Xn file...')
     gdf_xns=gpd.read_file(str_xns_path)
     ## Groupby linkno:
     gp_xns=gdf_xns.groupby('linkno')
-    
+
+    # Access the floodplain and DEM grids:
     with rasterio.open(str(str_dem_path)) as ds_dem:
         with rasterio.open(str(str_fp_path)) as ds_fp:
-    
-            for tpl in gdf_xns.itertuples:
-                
-                ## Mask each grid:
-                print('whhhaaa??')
+            ## Loop over the linkno groups:
+            for linkno, gdf in gp_xns:
+
+#                if linkno!=3343:continue # for testing
+
+                ## Loop over the Xns along this linkno:
+                for i, tpl in enumerate(gdf.itertuples()):
+                    try:
+                        ## Xn ID and index for saving:
+                        lst_id.append(i)
+                        lst_index.append(tpl.Index)
+                    except Exception as e:
+                        print(f'Error with itertuple: {str(e)}')
+
+                    try:
+                        ## Mask the floodplain grid with each Xn:
+                        w_fp, w_trans = rasterio.mask.mask(ds_fp, [mapping(tpl.geometry)], crop=True)
+                        w_fp=w_fp[0]
+                        w_fp=w_fp[w_fp!=ds_fp.nodata] # ignore nodata vals
+
+                        num_pixels=w_fp.size # number of fp pixels along the xn
+                        tot_width=num_pixels*ds_fp.res[0] # num pixels times cell resolution
+                        lst_width.append(tot_width)
+        #                net_width=tot_width-ch_wid # where to get ch_wid for a specific cross-section?
+                    except:
+                        lst_width.append(-9999.)
+
+                    try:
+                        ## Relative elevation (depth) metrics:
+                        min_depth=w_fp.min()
+                        max_depth=w_fp.max()
+                        rng_depth=max_depth-min_depth
+                        mean_depth=w_fp.mean()
+                        std_depth=w_fp.std()
+                        sum_depth=w_fp.sum()
+                        lst_min_d.append(min_depth)
+                        lst_max_d.append(max_depth)
+                        lst_rng_d.append(rng_depth)
+                        lst_mean_d.append(mean_depth)
+                        lst_std_d.append(std_depth)
+                        lst_sum_d.append(sum_depth)
+                    except:
+                        lst_min_d.append(-9999.)
+                        lst_max_d.append(-9999.)
+                        lst_rng_d.append(-9999.)
+                        lst_mean_d.append(-9999.)
+                        lst_std_d.append(-9999.)
+                        lst_sum_d.append(-9999.)
+
+
+                    try:
+                        ## Also mask the DEM to get absolute elevation metrics:
+                        w_dem, w_trans = rasterio.mask.mask(ds_dem, [mapping(tpl.geometry)], crop=True)
+                        w_dem=w_dem[0]
+                        w_dem=w_dem[w_dem!=ds_dem.nodata]
+
+                        ## Absolute elevation metrics:
+                        min_elev=w_dem.min()
+                        max_elev=w_dem.max()
+                        rng_elev=max_elev-min_elev
+                        mean_elev=w_dem.mean()
+                        std_elev=w_dem.std()
+                        sum_elev=w_dem.sum()
+                        lst_min_e.append(min_elev)
+                        lst_max_e.append(max_elev)
+                        lst_rng_e.append(rng_elev)
+                        lst_mean_e.append(mean_elev)
+                        lst_std_e.append(std_elev)
+                        lst_sum_e.append(sum_elev)
+                    except:
+                        lst_min_e.append(-9999.)
+                        lst_max_e.append(-9999.)
+                        lst_rng_e.append(-9999.)
+                        lst_mean_e.append(-9999.)
+                        lst_std_e.append(-9999.)
+                        lst_sum_e.append(-9999.)
+
+            ## Initialize fields:
+            gdf_xns['xn_id_1dfp']=-9999.
+            gdf_xns['totwid_1dfp']=-9999.
+            ## Depth:
+            gdf_xns['mindep_1dfp']=-9999.
+            gdf_xns['maxdep_1dfp']=-9999.
+            gdf_xns['rngdep_1dfp']=-9999.
+            gdf_xns['meandep_1dfp']=-9999.
+            gdf_xns['stddep_1dfp']=-9999.
+            gdf_xns['sumdep_1dfp']=-9999.
+            ## Elevation:
+            gdf_xns['minele_1dfp']=-9999.
+            gdf_xns['maxele_1dfp']=-9999.
+            gdf_xns['rngele_1dfp']=-9999.
+            gdf_xns['meanele_1dfp']=-9999.
+            gdf_xns['stdele_1dfp']=-9999.
+            gdf_xns['sumele_1dfp']=-9999.
+
+            ## Add new values:
+            gdf_xns.loc[lst_index, 'xn_id_1dfp']=lst_id
+            gdf_xns.loc[lst_index, 'totwid_1dfp']=lst_width
+            ## Depth:
+            gdf_xns.loc[lst_index, 'mindep_1dfp']=lst_min_d
+            gdf_xns.loc[lst_index, 'maxdep_1dfp']=lst_max_d
+            gdf_xns.loc[lst_index, 'rngdep_1dfp']=lst_rng_d
+            gdf_xns.loc[lst_index, 'meandep_1dfp']=lst_mean_d
+            gdf_xns.loc[lst_index, 'stddep_1dfp']=lst_std_d
+            gdf_xns.loc[lst_index, 'sumdep_1dfp']=lst_sum_d
+            ## Elevation:
+            gdf_xns.loc[lst_index, 'minele_1dfp']=lst_min_e
+            gdf_xns.loc[lst_index, 'maxele_1dfp']=lst_max_e
+            gdf_xns.loc[lst_index, 'rngele_1dfp']=lst_rng_e
+            gdf_xns.loc[lst_index, 'meanele_1dfp']=lst_mean_e
+            gdf_xns.loc[lst_index, 'stdele_1dfp']=lst_std_e
+            gdf_xns.loc[lst_index, 'sumele_1dfp']=lst_sum_e
+
+            ## Save it again:
+            gdf_xns.to_file(str_xns_path)
 
 # ===================================================================================
 #  Read an existing Xn file, calculate xy bounds for each linkno and read the DEM
@@ -2656,17 +2784,17 @@ def read_fp_xns_shp_and_get_dem_window(str_xns_path, str_dem_path, str_fp_path):
 # ===================================================================================
 def get_stats(group):
     return {'min': group.min(), 'max': group.max()}
-    
+
 #def transform(row):
 #    return row['a']
-    
-def read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path):    
-    
+
+def read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path):
+
     min_nodata_thresh = -99999.0
-    max_nodata_thresh = 99999.0     
-    
+    max_nodata_thresh = 99999.0
+
     print('Reading and interpolating elevation along Xn\'s...')
-    
+
     lst_linknos=[]
     lst_x1=[]
     lst_y1=[]
@@ -2678,7 +2806,7 @@ def read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path):
     # First get all linknos...
     with fiona.open(np.str(str_xns_path), 'r') as xn_shp: # NOTE: For some reason you have to explicitly convert the variable to a string (is it unicode?)
 
-#        j=0  
+#        j=0
 #        progBar = self.progressBar
 #        progBar.setVisible(True)
 #        progBar.setRange(0, len(xn_shp))
@@ -2688,93 +2816,93 @@ def read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path):
 #            progdialog.setWindowTitle("FACET")
 #            progdialog.setWindowModality(QtCore.Qt.WindowModal)
 #            progdialog.resize(350, 110)
-#            progdialog.show()       
-#            # ==================================    
-         
+#            progdialog.show()
+#            # ==================================
+
         # Read each feature line...
         for line in xn_shp:
             lst_linknos.append(line['properties']['linkno'])
             lst_x1.append(line['geometry']['coordinates'][0][0])
-            lst_y1.append(line['geometry']['coordinates'][0][1])      
+            lst_y1.append(line['geometry']['coordinates'][0][1])
             lst_x2.append(line['geometry']['coordinates'][1][0])
-            lst_y2.append(line['geometry']['coordinates'][1][1]) 
+            lst_y2.append(line['geometry']['coordinates'][1][1])
             lst_strmord.append(line['properties']['strmord'])
-            
-            
+
+
     df_coords = pd.DataFrame({'linkno':lst_linknos, 'x1':lst_x1, 'y1':lst_y1, 'x2':lst_x2, 'y2':lst_y2, 'strmord':lst_strmord})
-         
+
     # Now loop over the linknos to get access grid by window...
     with rasterio.open(str(str_dem_path)) as ds_dem:
-        
+
         nodata_val = ds_dem.nodata # NODATA val must be defined for this to return anything
-    
+
         # Transform to pixel space
         df_coords['col1'], df_coords['row1'] = ~ds_dem.transform * (df_coords['x1'], df_coords['y1'])
         df_coords['col2'], df_coords['row2'] = ~ds_dem.transform * (df_coords['x2'], df_coords['y2'])
-        
+
         ### OR...
         gp_coords = df_coords.groupby('linkno')
-        
+
         lst_all_zi=[]
         j=0
-        
+
         for linkno, df_linkno in gp_coords:
-            
+
 #            print(linkno)
-            
+
 #            if linkno != 120:
 #                continue
-            
+
             row_min = int(df_linkno[['row1','row2']].min(axis=0).min())
             row_max = int(df_linkno[['row1','row2']].max(axis=0).max())
             col_min = int(df_linkno[['col1','col2']].min(axis=0).min())
-            col_max = int(df_linkno[['col1','col2']].max(axis=0).max())    
+            col_max = int(df_linkno[['col1','col2']].max(axis=0).max())
             strmord = int(df_linkno.strmord.iloc[0])
-            
+
             # Now get the DEM specified by this window as a numpy array...
-            w = ds_dem.read(1, window=((row_min, row_max+1),(col_min, col_max+1))) 
-            
+            w = ds_dem.read(1, window=((row_min, row_max+1),(col_min, col_max+1)))
+
             w_min = np.min(w)
-            w_max = np.max(w)                      
-            
+            w_max = np.max(w)
+
             if w_min < min_nodata_thresh:
                 nodata_val = w_min
             elif w_max > max_nodata_thresh:
-                nodata_val = w_max                
-                        
-            # NOW loop over each Xn...                                   
+                nodata_val = w_max
+
+            # NOW loop over each Xn...
             for tpl_xn in df_linkno.itertuples():
-                
+
 #                progBar.setValue(j)
-                j+=1    
-                
-#                    # ====================================== 
+                j+=1
+
+#                    # ======================================
 #                    QtCore.QCoreApplication.processEvents()
 #                    if progdialog.wasCanceled():
-#                        break     
-#                               
+#                        break
+#
 #                    progdialog.setValue(j)
-#                    # ======================================                     
-                
+#                    # ======================================
+
                 xn_len = int(np.hypot(tpl_xn.col2-tpl_xn.col1, tpl_xn.row2-tpl_xn.row1))
-                
+
                 lst_xnrow = np.linspace(tpl_xn.row1-row_min, tpl_xn.row2-row_min, xn_len)
                 lst_xncol = np.linspace(tpl_xn.col1-col_min, tpl_xn.col2-col_min, xn_len)
-                
+
                 #xnptdist = xn_len/len(lst_xnrow) #this is always 1 cell or equivalent to cell_size in meters/feet?
-                try:            
-                    arr_zi = w[lst_xnrow.astype(np.int), lst_xncol.astype(np.int)]   # nearest-neighbor                
+                try:
+                    arr_zi = w[lst_xnrow.astype(np.int), lst_xncol.astype(np.int)]   # nearest-neighbor
                 except:
                     continue # Just skip this Xn altogether?  Could be smarter (eg, are the indices > len(w)?)
 #                lst_zi = ndimage.map_coordinates(w, np.vstack((lst_xnrow, lst_xncol)), order=1, mode='nearest') # use this for additonal interpolation options (ie, cubic, bilinear, etc)
-                
-#                plt.plot(np.arange(len(zi)), zi)   
-                
+
+#                plt.plot(np.arange(len(zi)), zi)
+
                 # Remove possible no data values...NOTE:  They may not be defined in the original file
                 arr_zi = arr_zi[arr_zi != np.float32(nodata_val)]
-                
+
                 if arr_zi.size < 5: continue # if it only has less than 5 elevation measurements along this Xn, skip it
-                                
+
                 # Convert these from window row/col to raster row/col for bankpt use...
                 for i, xnrow in enumerate(lst_xnrow):
                     lst_xnrow[i] = lst_xnrow[i] + row_min
@@ -2783,12 +2911,12 @@ def read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path):
                 tpl_out = (linkno, arr_zi, lst_xnrow, lst_xncol, strmord)
                 lst_all_zi.append(tpl_out)
 #                i += 1
-           
-#    print('\tTotal Xn\'s:  {}'.format(i))    
+
+#    print('\tTotal Xn\'s:  {}'.format(i))
 #    print('\tTime interpolating elevation along Xn\'s:  ' + str(timeit.default_timer() - start_time))
 
     return pd.DataFrame(lst_all_zi, columns=['linkno','elev','xn_row','xn_col','strmord'])
-    
+
 # ===================================================================================
 #  Build the Xns for all reaches and write to shapefile
 # ===================================================================================
@@ -2797,66 +2925,66 @@ def write_xns_shp(df_coords, streamlines_crs, str_xns_path, bool_isvalley, p_xng
         Builds Xns from x-y pairs representing shapely interpolations along a reach
 
         Input: a list of tuples (row, col, linkno) for a reach
-        
+
         Output: list of tuples of lists describing the Xn's along a reach (row, col)
-        
+
     """
-    j=0   
+    j=0
 #    progBar = self.progressBar
 #    progBar.setVisible(True)
 #    progBar.setRange(0, pd.unique(df_coords['linkno']).size) # need length on unique linkno values
-    
+
 #        # ==================================
 #        progdialog = QtGui.QProgressDialog("Building and Writing Cross Section File...", "Cancel", 0, pd.unique(df_coords['linkno']).size)
 #        progdialog.setWindowTitle("FACET")
 #        progdialog.setWindowModality(QtCore.Qt.WindowModal)
 #        progdialog.resize(350, 110)
-#        progdialog.show()       
-#        # ==================================        
-    
+#        progdialog.show()
+#        # ==================================
+
 #    slopeCutoffVertical = 20 # just a threshold determining when to call a Xn vertical (if it's above this, make it vertical. Otherwise things get whacky?)
 
     lst_xnrowcols = [] # the final output, a list of tuples of XY coordinate pairs for all Xn's for this reach
 
     XnCntr = 0
 #    m_init = 0
-    
-    gp_coords = df_coords.groupby('linkno')  
-           
+
+    gp_coords = df_coords.groupby('linkno')
+
     # Create the Xn shapefile for writing...
-#    test_schema = {'geometry': 'LineString', 'properties': {'linkno': 'int', 'endpt1_x':'float', 'endpt1_y':'float', 'endpt2_x':'float', 'endpt2_y':'float'}} 
-    test_schema = {'geometry': 'LineString', 'properties': {'linkno': 'int', 'strmord':'int'}} 
-    
+#    test_schema = {'geometry': 'LineString', 'properties': {'linkno': 'int', 'endpt1_x':'float', 'endpt1_y':'float', 'endpt2_x':'float', 'endpt2_y':'float'}}
+    test_schema = {'geometry': 'LineString', 'properties': {'linkno': 'int', 'strmord':'int'}}
+
     print('Building and Writing Cross Section File...')
     with fiona.open(str_xns_path, 'w', driver='ESRI Shapefile', crs=streamlines_crs, schema=test_schema) as chan_xns:
-        
+
         for i_linkno, df_linkno in gp_coords:
-            
+
             i_linkno = int(i_linkno)
             i_order = int(df_linkno.order.iloc[0])
-            
+
 #            if i_linkno != 177:
 #                continue
 
 #            progBar.setValue(j)
-            j+=1 
+            j+=1
 
-#                # ====================================== 
+#                # ======================================
 #                QtCore.QCoreApplication.processEvents()
 #                if progdialog.wasCanceled():
-#                    break     
-#                           
+#                    break
+#
 #                progdialog.setValue(j)
-#                # ======================================    
-                
+#                # ======================================
+
             # NOTE:  Define Xn length (p_xnlength) -- and other parameters? -- relative to stream order
             ## Settings for stream channel cross-sections:
             p_xnlength, p_fitlength=get_xn_length_by_order(i_order, bool_isvalley)
 
 #             if not(bool_isvalley):
-                
+
 # #                if i_order != 6: continue
-                
+
 #                 if i_order == 1:
 #                     p_xnlength=20
 #                     p_fitlength = 3
@@ -2867,27 +2995,27 @@ def write_xns_shp(df_coords, streamlines_crs, str_xns_path, bool_isvalley, p_xng
 #                     p_xnlength=40
 #                     p_fitlength = 9
 #                 elif i_order == 4:
-#                     p_xnlength=60 
+#                     p_xnlength=60
 #                     p_fitlength = 12
 #                 elif i_order == 5:
-#                     p_xnlength=80  
+#                     p_xnlength=80
 #                     p_fitlength = 15
 #                 elif i_order >= 6:
-#                     p_xnlength=250 
+#                     p_xnlength=250
 #                     p_fitlength = 20
 # #                elif i_order == 7:
-# #                    p_xnlength=130 
+# #                    p_xnlength=130
 # #                    p_fitlength = 21
 # #                elif i_order == 8:
-# #                    p_xnlength=150  
+# #                    p_xnlength=150
 # #                    p_fitlength = 24
-                    
+
 #             ## Settings for floodplain cross-sections:
 #             elif bool_isvalley:
 
 #                 if i_order == 1:
 #                     p_xnlength=20
-#                     p_fitlength = 3 
+#                     p_fitlength = 3
 #                 elif i_order == 2:
 #                     p_xnlength=23
 #                     p_fitlength = 6
@@ -2895,50 +3023,50 @@ def write_xns_shp(df_coords, streamlines_crs, str_xns_path, bool_isvalley, p_xng
 #                     p_xnlength=40
 #                     p_fitlength = 9
 #                 elif i_order == 4:
-#                     p_xnlength=60 
+#                     p_xnlength=60
 #                     p_fitlength = 12
 #                 elif i_order == 5:
-#                     p_xnlength=80  
+#                     p_xnlength=80
 #                     p_fitlength = 15
 #                 elif i_order >= 6:
-#                     p_xnlength=250 
+#                     p_xnlength=250
 #                     p_fitlength = 20
 # #                elif i_order == 7:
-# #                    p_xnlength=130 
+# #                    p_xnlength=130
 # #                    p_fitlength = 21
 # #                elif i_order == 8:
-# #                    p_xnlength=150  
-# #                    p_fitlength = 24                
-    
+# #                    p_xnlength=150
+# #                    p_fitlength = 24
+
             reach_len = len(df_linkno['x'])
-        
+
             if reach_len <= p_xngap:
 #                print('Less than!')
                 continue # skip it for now
-        
+
             # Loop along the reach at the specified intervals...(Xn loop)
-            for i in range( p_xngap, reach_len-p_xngap, p_xngap ):                
-        
+            for i in range( p_xngap, reach_len-p_xngap, p_xngap ):
+
                 lstThisSegmentRows = []
                 lstThisSegmentCols = []
-        
+
                 if p_fitlength > i or i + p_fitlength >= reach_len: # if i + paramFitLength > reach_len
                     fitLength = p_xngap
                 else:
-                    fitLength = p_fitlength                    
-        
+                    fitLength = p_fitlength
+
                 lstThisSegmentRows.append(df_linkno['y'].iloc[i+fitLength])
                 lstThisSegmentRows.append(df_linkno['y'].iloc[i-fitLength])
                 lstThisSegmentCols.append(df_linkno['x'].iloc[i+fitLength])
                 lstThisSegmentCols.append(df_linkno['x'].iloc[i-fitLength])
-        
+
                 midPtRow = df_linkno['y'].iloc[i]
-                midPtCol = df_linkno['x'].iloc[i]                
-                
+                midPtCol = df_linkno['x'].iloc[i]
+
                 # Send it the endpts of what you to draw a perpendicular line to...
                 lst_xy = build_xns(lstThisSegmentRows, lstThisSegmentCols, midPtCol, midPtRow, p_xnlength) # returns a list of two endpoints
-        
-        
+
+
 #                if (max(lstThisSegmentCols) - min(lstThisSegmentCols) < 3):
 #                    m_init = 9999.0
 #                elif (max(lstThisSegmentRows) - min(lstThisSegmentRows) < 3):
@@ -2946,67 +3074,67 @@ def write_xns_shp(df_coords, streamlines_crs, str_xns_path, bool_isvalley, p_xng
 #                else:
 #                    LinFit = np.polyfit(lstThisSegmentCols,lstThisSegmentRows,1) # NOTE: could just use basic math here instead?!
 #                    m_init = LinFit[0]
-#        
+#
 #                # Check for zero or infinite slope...
 #                if m_init == 0:
 #                    m_init = 0.0001
 #                elif isinf(m_init):
 #                    m_init = 9999.0
-#        
+#
 #                # Find the orthogonal slope...
 #                m_ortho = -1/m_init
-#                          
+#
 #                xn_steps = [-float(p_xnlength),float(p_xnlength)] # just the end points
-#        
+#
 #                lst_xy=[]
 #                for r in xn_steps:
-#        
+#
 #                    # Make sure it's not too close to vertical...
 #                    # NOTE X-Y vs. Row-Col here...
 #                    if (abs(m_ortho) > slopeCutoffVertical):
 #                        tpl_xy = (midPtCol, midPtRow+r)
-#                        
+#
 #                    else:
-#                        fit_col_ortho = (midPtCol + (float(r)/(sqrt(1 + m_ortho**2))))                       
+#                        fit_col_ortho = (midPtCol + (float(r)/(sqrt(1 + m_ortho**2))))
 #                        tpl_xy = float(((midPtCol + (float(r)/(sqrt(1 + m_ortho**2)))))), float(((m_ortho)*(fit_col_ortho-midPtCol) + midPtRow))
-#                    
+#
 #                    lst_xy.append(tpl_xy)
-                         
+
                 XnCntr = XnCntr + 1
-                
+
                 # the shapefile geometry use (lon,lat) Requires a list of x-y tuples
                 line = {'type': 'LineString', 'coordinates':lst_xy}
 #                prop = {'linkno': i_linkno, 'endpt1_x':lst_xy[0][0], 'endpt1_y':lst_xy[0][1], 'endpt2_x':lst_xy[1][0], 'endpt2_y':lst_xy[1][1]}
                 prop = {'linkno': i_linkno, 'strmord': i_order}
-                chan_xns.write({'geometry': line, 'properties':prop}) 
-                
+                chan_xns.write({'geometry': line, 'properties':prop})
+
 #                if XnCntr > 10:
 #                    break
-        
+
     return lst_xnrowcols
-    
+
 # ===================================================================================
 #  Build Xn's based on vector features
 # ===================================================================================
 def get_stream_coords_from_features(str_streams_filepath, cell_size, str_reachid, str_orderid):
-        
+
 #        try:
     lst_x=[]
     lst_y=[]
     lst_linkno=[]
     lst_order=[]
-    
+
     print('Getting stream coords from features...')
- 
+
     p_interp_spacing = int(cell_size) #3 # larger numbers would simulate a more smoothed reach | NOTE: Hardcode this = grid resolution?
     j=0 # prog bar
-    
+
     # Open the streamlines shapefile...
     with fiona.open(str(str_streams_filepath), 'r') as streamlines: # NOTE: For some reason you have to explicitly convert the variable to a string (is it unicode?)
-   
+
         # Get the crs...
-        streamlines_crs = streamlines.crs  
-#        str_proj4 = crs.to_string(streamlines.crs)         
+        streamlines_crs = streamlines.crs
+#        str_proj4 = crs.to_string(streamlines.crs)
 
 #            progBar.setRange(0,len(streamlines))
 
@@ -3015,34 +3143,34 @@ def get_stream_coords_from_features(str_streams_filepath, cell_size, str_reachid
 #        progdialog.setWindowTitle("FACET")
 #        progdialog.setWindowModality(QtCore.Qt.WindowModal)
 #        progdialog.resize(350, 110)
-#        progdialog.show()       
+#        progdialog.show()
 #        # ==================================
-        
+
         for line in streamlines:
-            
-#           # ====================================== 
+
+#           # ======================================
 #           QtCore.QCoreApplication.processEvents()
 #           if progdialog.wasCanceled():
-#               break     
-#                       
+#               break
+#
 #           progdialog.setValue(j)
 #           # ======================================
-           
+
            j+=1
-#               self.emit(QtCore.SIGNAL("update(int)"), int(100*len(streamlines)/j)) 
-           
+#               self.emit(QtCore.SIGNAL("update(int)"), int(100*len(streamlines)/j))
+
 #           print('{} | {}'.format(i_linkno, j))
            line_shply = LineString(line['geometry']['coordinates'])
-          
+
            length = line_shply.length # units depend on crs
-                      
-           if length > 9:       
-               
-               i_linkno = line['properties'][str_reachid]           
+
+           if length > 9:
+
+               i_linkno = line['properties'][str_reachid]
                i_order = line['properties'][str_orderid]
-               
+
 #               if i_linkno != 1368: continue
-              
+
                # Smoothing higher order reaches via Shapely...
                if i_order <= 3:
                    line_shply = line_shply.simplify(5.0, preserve_topology=False)
@@ -3051,34 +3179,29 @@ def get_stream_coords_from_features(str_streams_filepath, cell_size, str_reachid
                elif i_order == 5:
                    line_shply = line_shply.simplify(20.0, preserve_topology=False)
                elif i_order >= 6:
-                   line_shply = line_shply.simplify(30.0, preserve_topology=False)                
-       
+                   line_shply = line_shply.simplify(30.0, preserve_topology=False)
+
                int_pts = np.arange(0, length, p_interp_spacing) # p_interp_spacing in projection units?
 
                for i in int_pts: # lambda here instead?
-                  
+
                    i_pt = np.array(line_shply.interpolate(i))
-                   
+
                    lst_x.append(i_pt[0])
                    lst_y.append(i_pt[1])
-                   lst_linkno.append(i_linkno)   
+                   lst_linkno.append(i_linkno)
                    lst_order.append(i_order)
-           
+
         df_coords = pd.DataFrame({'x':lst_x, 'y':lst_y, 'linkno':lst_linkno, 'order':lst_order})
-#               df_coords.set_index('linkno', inplace=True)  
-               
+#               df_coords.set_index('linkno', inplace=True)
+
 #           if j == 100:
 #               print('pause')
-               
+
         df_coords.drop_duplicates(['x','y'], inplace=True) # duplicates due to interpolation (?)
-                       
+
 #        except Exception as e:
 ##            print('Error!: {}'.format(e.strerror))
 #            QtGui.QMessageBox.information(self, 'Error!', '{}'.format(e.strerror))
-        
-    return df_coords, streamlines_crs # A list of lists      
 
-
-    
-    
-    
+    return df_coords, streamlines_crs # A list of lists
