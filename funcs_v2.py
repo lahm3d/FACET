@@ -2512,105 +2512,105 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
     ##                print 'no bank!'
 
 #        progDialog.close()
-    
+
     except Exception as e:
         print('\r\nError in analyze_xn_elev. Exception: {} \n'.format(e))
         pass
 
-    return lst_bfmetrics    
-    
+    return lst_bfmetrics
+
 # ====================================================================================
 #  Calculate channel metrics based on the bankpoint slope-threshold method at each Xn,
-#   writing the bank points to a shapefile 
+#   writing the bank points to a shapefile
 # ====================================================================================
-def chanmetrics_bankpts(df_xn_elev, str_xnsPath, str_demPath, str_bankptsPath, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh): 
-       
-    print('Channel metrics from bank points...')    
-    
+def chanmetrics_bankpts(df_xn_elev, str_xnsPath, str_demPath, str_bankptsPath, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh):
+
+    print('Channel metrics from bank points...')
+
     # << BEGIN LOOP >>
     # Do the rest by looping in strides, rather than all at once, to conserve memory...(possibly using multiprocessing)
     xn_count = get_feature_count(str_xnsPath)
-    
+
     # Striding...
     arr_strides = np.linspace(0, xn_count, xn_count/100)
-    arr_strides = np.delete(arr_strides,0)  
-    
+    arr_strides = np.delete(arr_strides,0)
+
     # NOTE:  Use MultiProcessing here over arr_strides??
 
 #    progBar = self.progressBar
 #    progBar.setVisible(True)
 #    progBar.setRange(0, arr_strides.size)
-        
+
     # Now loop over the linknos to get access grid by window...
     with rasterio.open(str_demPath) as ds_dem:
-        
+
         dem_crs = ds_dem.crs
         nodata_val = ds_dem.nodata
-        
+
         # Define the schema for the output bank points shapefile...
         schema = {'geometry': 'Point', 'properties': {'xn_num': 'int', 'linkno':'int','bank_hght':'float','bank_elev':'float',
                     'bnk_ang_1':'float','bnk_ang_2':'float','bf_area':'float','chan_width':'float','obank_rat':'float',
-                    'area_ratio':'float'}} 
-        
+                    'area_ratio':'float'}}
+
         with fiona.open(str_bankptsPath, 'w', driver='ESRI Shapefile', crs=dem_crs, schema=schema) as bankpts:
-            
+
 #            k=0
             j=0
             for indx in arr_strides:
-                
+
 #                progBar.setValue(k)
 #                k+=1
-                
-#                print('\tIndex {} - {}/{}'.format(j,int(indx),xn_count))        
+
+#                print('\tIndex {} - {}/{}'.format(j,int(indx),xn_count))
                 df_xn_elev_n = df_xn_elev.iloc[j:int(indx)]
-                j = int(indx)+1        
-              
+                j = int(indx)+1
+
 #                print('\tIndex 143613 - 143712/{}'.format(xn_count))
 #                df_xn_elev_n = df_xn_elev.iloc[143613:143712]
-            
-                # << INTERPOLATE XNs >>  
+
+                # << INTERPOLATE XNs >>
                 df_bank_metrics = pd.DataFrame(analyze_xnelev(df_xn_elev_n, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh, nodata_val),
                                                 columns=['xn_no','left_ind','right_ind','bank_height','slices','linkno','bank_elev','lf_bank_ang','rt_bank_ang','bankful_area','chan_width','overbank_ratio','area_ratio'])
-                
+
                 df_bank_metrics.set_index('xn_no', inplace=True)
-                
-                df_map = pd.merge(df_xn_elev, df_bank_metrics, left_index=True, right_index=True) 
+
+                df_map = pd.merge(df_xn_elev, df_bank_metrics, left_index=True, right_index=True)
 
                 lst_lfbank_row=[]
                 lst_lfbank_col=[]
                 lst_rtbank_row=[]
                 lst_rtbank_col=[]
-                
+
                 for tpl_row in df_map.itertuples():
-                    
+
                     lst_lfbank_row.append(interpolate(tpl_row.xn_row, tpl_row.left_ind))
                     lst_lfbank_col.append(interpolate(tpl_row.xn_col, tpl_row.left_ind))
                     lst_rtbank_row.append(interpolate(tpl_row.xn_row, tpl_row.right_ind))
                     lst_rtbank_col.append(interpolate(tpl_row.xn_col, tpl_row.right_ind))
-                    
+
                 df_map['lfbank_row'] = pd.Series(lst_lfbank_row).values
                 df_map['lfbank_col'] = pd.Series(lst_lfbank_col).values
                 df_map['rtbank_row'] = pd.Series(lst_rtbank_row).values
-                df_map['rtbank_col'] = pd.Series(lst_rtbank_col).values    
-                
+                df_map['rtbank_col'] = pd.Series(lst_rtbank_col).values
+
                 # Transform to pixel space...
-                df_map['lfbank_x'], df_map['lfbank_y'] = ds_dem.transform * (df_map['lfbank_col'], df_map['lfbank_row']) 
+                df_map['lfbank_x'], df_map['lfbank_y'] = ds_dem.transform * (df_map['lfbank_col'], df_map['lfbank_row'])
                 df_map['rtbank_x'], df_map['rtbank_y'] = ds_dem.transform * (df_map['rtbank_col'], df_map['rtbank_row'])
-                        
+
                 # Write bankpts shapefile...
 #                print('Writing to bank points shapefile...')
                 for tpl_row in df_map.itertuples():
-                    
+
 #                    progDialog.setValue(k)
 #                    k+=1
-                    
+
                     tpl_left = (tpl_row.lfbank_x, tpl_row.lfbank_y)
-                    tpl_right = (tpl_row.rtbank_x, tpl_row.rtbank_y)            
-                    
+                    tpl_right = (tpl_row.rtbank_x, tpl_row.rtbank_y)
+
                     # the shapefile geometry use (lon,lat) Requires a list of x-y tuples
                     lf_pt = {'type': 'Point', 'coordinates':tpl_left}
                     rt_pt = {'type': 'Point', 'coordinates':tpl_right}
-                   
+
                     prop_lf = {'xn_num':int(tpl_row.Index),'linkno':int(tpl_row.linkno_x),'bank_hght':tpl_row.bank_height,'bank_elev':tpl_row.bank_elev,
                             'bnk_ang_1':tpl_row.lf_bank_ang,'bf_area':tpl_row.bankful_area,'bnk_ang_2':-9999.,
                             'chan_width':tpl_row.chan_width,'obank_rat':tpl_row.overbank_ratio,'area_ratio':tpl_row.area_ratio}
