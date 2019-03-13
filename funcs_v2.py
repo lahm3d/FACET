@@ -16,7 +16,7 @@ from numpy import asarray
 #from scipy.stats import gaussian_kde # TEST
 #from scipy.optimize import curve_fit # TEST
 from scipy import signal
-from scipy.ndimage import percentile_filter 
+from scipy.ndimage import percentile_filter
 
 import os
 #import ntpath
@@ -43,7 +43,7 @@ import pandas as pd
 import geopandas as gpd
 from geopandas.tools import sjoin
 #from scipy import ndimage
-#from shapely.geometry import Point, 
+#from shapely.geometry import Point,
 from shapely.geometry import shape, mapping, LineString, MultiLineString, Point, MultiPoint
 from shapely.ops import split
 from shapely.ops import unary_union
@@ -55,7 +55,7 @@ from shapely.ops import unary_union
 import fiona
 from fiona import collection
 from fiona.crs import from_epsg
-import jenkspy 
+import jenkspy
 
 #import gospatial as gs
 
@@ -72,42 +72,42 @@ np.seterr(over='raise')
 #  Utility functions
 # ===============================================================================
 #def open_mat_files():
-#    
+#
 #    # Loads a MATLAB file (.mat) using SciPy...
 #    test = sio.loadmat(r'C:\USGS_TerrainBathymetry_Project\CBP_analysis\field_data\FieldData\smith\AtGageAB_US.mat')
-#    
+#
 #    arr_data = test['AtGageAB_US'] #numpy array
-#    
+#
 #    return
 #def rotate(x_center, x_orig, y_center, y_orig, theta):
 #    x_rot = np.cos(theta)*(x_orig-x_center) - np.sin(theta)*(y_orig-y_center) + x_center
-#    y_rot = np.sin(theta)*(x_orig-x_center) + np.cos(theta)*(y_orig-y_center) + y_center    
+#    y_rot = np.sin(theta)*(x_orig-x_center) + np.cos(theta)*(y_orig-y_center) + y_center
 #    return x_rot, y_rot
 
 # lstThisSegmentRows, lstThisSegmentCols, midpt_x, midpt_y, p_fpxnlen
-def compress_grids(str_in_grid, str_out_grid):    
+def compress_grids(str_in_grid, str_out_grid):
     ## Access the interp pts .tif file:
     with rasterio.open(str_in_grid) as ds_in:
-        
+
         meta_in = ds_in.meta.copy()
-        meta_in.update(compress='lzw')   
+        meta_in.update(compress='lzw')
         meta_in.update(dtype=rasterio.float32)
-        
+
         arr = ds_in.read(1)
-        
+
         print('Applying percentile filter...')
         arr=percentile_filter(arr, 50., size=3)
-    
+
     print('Compressing and saving as regular TIFF...')
     with rasterio.Env(GDAL_CACHEMAX=256, GDAL_NUM_THREADS='ALL_CPUS', TILED='YES',  BLOCKXSIZE=512, BLOCKYSIZE=512, BIGTIFF='NO'):
-        with rasterio.open(str_out_grid, 'w', **meta_in) as ds_out:     
-            ds_out.write(arr.astype(rasterio.float32), indexes=1)        
+        with rasterio.open(str_out_grid, 'w', **meta_in) as ds_out:
+            ds_out.write(arr.astype(rasterio.float32), indexes=1)
 
 # ================================================================================
 #   For wavelet curvature calculation (Chandana)
 # ================================================================================
-def gauss_kern(sigma):    
-    """ Returns a normalized 2D gauss kernel array for convolutions """ 
+def gauss_kern(sigma):
+    """ Returns a normalized 2D gauss kernel array for convolutions """
 
     sigma=int(sigma)
 
@@ -115,25 +115,25 @@ def gauss_kern(sigma):
 
     g2x = (1-x**2/sigma**2)*np.exp(-(x**2+y**2)/2/sigma**2)*1/np.sqrt(2*np.pi*sigma**2)/ 4 / sigma * np.exp(float(0.5));
     g2y = (1-y**2/sigma**2)*np.exp(-(x**2+y**2)/2/sigma**2)*1/np.sqrt(2*np.pi*sigma**2)/ 4 / sigma * np.exp(float(0.5));
-  
+
     return g2x, g2y
-    
+
 # ================================================================================
 #   For 2D cross sectional measurement
-# ================================================================================    
+# ================================================================================
 def build_xns(lstThisSegmentRows, lstThisSegmentCols, midPtCol, midPtRow, p_xnlength):
-    
+
     slopeCutoffVertical = 20 # another check
-        
+
     # Find initial slope...
     if (abs(lstThisSegmentCols[0] - lstThisSegmentCols[-1]) < 3):
         m_init = 9999.0
     elif (abs(lstThisSegmentRows[0] - lstThisSegmentRows[-1]) < 3):
         m_init = 0.0001
     else:
-        m_init = (lstThisSegmentRows[0] - lstThisSegmentRows[-1])/(lstThisSegmentCols[0] - lstThisSegmentCols[-1]) 
-        
-        
+        m_init = (lstThisSegmentRows[0] - lstThisSegmentRows[-1])/(lstThisSegmentCols[0] - lstThisSegmentCols[-1])
+
+
 #    if (max(lstThisSegmentCols) - min(lstThisSegmentCols) < 3):
 #        m_init = 9999.0
 #    elif (max(lstThisSegmentRows) - min(lstThisSegmentRows) < 3):
@@ -150,7 +150,7 @@ def build_xns(lstThisSegmentRows, lstThisSegmentCols, midPtCol, midPtRow, p_xnle
 
     # Find the orthogonal slope...
     m_ortho = -1/m_init
-              
+
     xn_steps = [-float(p_xnlength),float(p_xnlength)] # just the end points
 
     lst_xy=[]
@@ -160,14 +160,14 @@ def build_xns(lstThisSegmentRows, lstThisSegmentCols, midPtCol, midPtRow, p_xnle
         # NOTE X-Y vs. Row-Col here...
         if (abs(m_ortho) > slopeCutoffVertical):
             tpl_xy = (midPtCol, midPtRow+r)
-            
+
         else:
-            fit_col_ortho = (midPtCol + (float(r)/(sqrt(1 + m_ortho**2))))                       
+            fit_col_ortho = (midPtCol + (float(r)/(sqrt(1 + m_ortho**2))))
             tpl_xy = float(((midPtCol + (float(r)/(sqrt(1 + m_ortho**2)))))), float(((m_ortho)*(fit_col_ortho-midPtCol) + midPtRow))
-        
-        lst_xy.append(tpl_xy)    # A list of two tuple endpts          
-    
-    return lst_xy 
+
+        lst_xy.append(tpl_xy)    # A list of two tuple endpts
+
+    return lst_xy
 
 def get_xn_length_by_order(i_order, bool_isvalley):
     if not(bool_isvalley):
@@ -181,19 +181,19 @@ def get_xn_length_by_order(i_order, bool_isvalley):
             p_xnlength=40
             p_fitlength = 9
         elif i_order == 4:
-            p_xnlength=60 
+            p_xnlength=60
             p_fitlength = 12
         elif i_order == 5:
-            p_xnlength=80  
+            p_xnlength=80
             p_fitlength = 15
         elif i_order >= 6:
-            p_xnlength=250 
-            p_fitlength = 20            
+            p_xnlength=250
+            p_fitlength = 20
     ## Settings for floodplain cross-sections:
     elif bool_isvalley:
         if i_order == 1:
             p_xnlength=50
-            p_fitlength = 5 
+            p_fitlength = 5
         elif i_order == 2:
             p_xnlength=75
             p_fitlength = 8
@@ -201,22 +201,22 @@ def get_xn_length_by_order(i_order, bool_isvalley):
             p_xnlength=100
             p_fitlength = 12
         elif i_order == 4:
-            p_xnlength=150 
+            p_xnlength=150
             p_fitlength = 20
         elif i_order == 5:
-            p_xnlength=200  
+            p_xnlength=200
             p_fitlength = 30
         elif i_order >= 6:
-            p_xnlength=500 
+            p_xnlength=500
             p_fitlength = 40
-            
+
     return p_xnlength, p_fitlength
 
 def get_cell_size(str_grid_path):
-        
+
     with rasterio.open(str(str_grid_path)) as ds_grid:
-        cs_x, cs_y = ds_grid.res    
-        
+        cs_x, cs_y = ds_grid.res
+
     return cs_x
 
 def rugosity(arr, res):
@@ -225,15 +225,15 @@ def rugosity(arr, res):
     of terrain complexity or roughness
     '''
     area3d = ((res**2)*(1 + np.gradient(arr)**2)**0.5).sum()
-    area2d = len(arr)*res**2    
-    
+    area2d = len(arr)*res**2
+
     return area3d/area2d
 
 # ==========================================================================
-#   Reproject a grid layer using rasterio 
-# ==========================================================================    
+#   Reproject a grid layer using rasterio
+# ==========================================================================
 def define_grid_projection(str_source_grid, dst_crs, dst_file):
-    
+
     print('Defining grid projection...')
     with rasterio.open(str_source_grid, 'r') as src:
         kwargs = src.meta.copy()
@@ -241,14 +241,14 @@ def define_grid_projection(str_source_grid, dst_crs, dst_file):
             'crs': dst_crs,
         })
         arr_src=src.read(1)
-        
-    with rasterio.open(dst_file, 'w', **kwargs) as dst:           
+
+    with rasterio.open(dst_file, 'w', **kwargs) as dst:
         dst.write(arr_src, indexes=1)
 
 
 # ==========================================================================
-#   Reproject a grid layer using rasterio 
-# ==========================================================================    
+#   Reproject a grid layer using rasterio
+# ==========================================================================
 def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
     """ Resolution is a pixel value as a tuple"""
     print('Reprojecting grid layer...')
@@ -262,7 +262,7 @@ def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
             'width': width,
             'height': height
         })
-            
+
         with rasterio.open(dst_file, 'w', **kwargs) as dst:
             for i in range(1, src.count + 1):
                 reproject(
@@ -277,109 +277,109 @@ def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
     return dst_file
 
 # ==========================================================================
-#   Reproject a vector layer using geopandas 
+#   Reproject a vector layer using geopandas
 # ==========================================================================
 def reproject_vector_layer(str_path_to_file, str_target_proj4):
     print('Reprojecting vector layer...')
-    
-    gdf = gpd.read_file(str_path_to_file) 
+
+    gdf = gpd.read_file(str_path_to_file)
     gdf = gdf.to_crs(str_target_proj4)
-    
+
     str_out_path = str_path_to_file[:-4] + '_proj.shp'
     gdf.to_file(str_out_path)
-    
+
     return str_out_path
-    
+
 # ==========================================================================
-#   For dissolving line features    
-# ==========================================================================    
+#   For dissolving line features
+# ==========================================================================
 def dissolve_line_features(str_lines_path, output_filename):
     print('Dissolve line features...')
 
     lst_all=[]
-    
+
     with fiona.open(str_lines_path) as lines:
-        
+
         crs = lines.crs
-        
-        schema = {'geometry':'MultiLineString', 'properties':{'linkno':'int:6'}}         
-        with fiona.open(output_filename, 'w', 'ESRI Shapefile', schema, crs) as output:           
-            
+
+        schema = {'geometry':'MultiLineString', 'properties':{'linkno':'int:6'}}
+        with fiona.open(output_filename, 'w', 'ESRI Shapefile', schema, crs) as output:
+
             for line in lines:
-                
+
                 lst_all.append(line['geometry']['coordinates'])
-                        
-            output.write({'properties':{'linkno':9999}, 'geometry':{'type':'MultiLineString','coordinates':lst_all}})                            
-        
+
+            output.write({'properties':{'linkno':9999}, 'geometry':{'type':'MultiLineString','coordinates':lst_all}})
+
     return
 
 # ==========================================================================
-#   For points along line feature at uniform distance    
-# ==========================================================================    
+#   For points along line feature at uniform distance
+# ==========================================================================
 def points_along_line_features(str_diss_lines_path, output_filename):
     print('Points along line features...')
-    
+
     p_interp_spacing = 1000
 
     with fiona.open(str_diss_lines_path) as line:
-        
+
         crs = line.crs
-        line = line[0]        
-                        
-        schema = {'geometry':'Point', 'properties':{'id':'int:6'}}         
+        line = line[0]
+
+        schema = {'geometry':'Point', 'properties':{'id':'int:6'}}
         with fiona.open(output_filename, 'w', 'ESRI Shapefile', schema, crs) as output:
-                    
+
             line_shply = MultiLineString(line['geometry']['coordinates'])
-           
+
             length = line_shply.length # units depend on crs
-               
+
             step_lens = np.arange(0, length, p_interp_spacing) # p_interp_spacing in projection units?
-    
+
             for i, step in enumerate(step_lens): # lambda here instead?
-              
+
                 i_pt = np.array(line_shply.interpolate(step))
-    
-                output.write({'properties':{'id':i}, 'geometry':{'type':'Point','coordinates':i_pt}})                            
-        
+
+                output.write({'properties':{'id':i}, 'geometry':{'type':'Point','coordinates':i_pt}})
+
     return
-    
-    
+
+
 # ==========================================================================
-#   For points along line feature at uniform distance    
-# ==========================================================================    
+#   For points along line feature at uniform distance
+# ==========================================================================
 def taudem_gagewatershed(str_pts_path, str_d8fdr_path):
     print('Points along line features...')
-    
+
     inputProc = str(4)
-    
+
     str_output_path = r'D:\Terrain_and_Bathymetry\USGS\CBP_analysis\DifficultRun\raw\dr3m_test_sheds.tif'
-    
+
     cmd = 'mpiexec -n ' + inputProc + ' GageWatershed -p ' + '"' + str_d8fdr_path + '"' + ' -o ' + '"' + str_pts_path + '"'  +  ' -gw ' + '"' + str_output_path + '"'
-    
+
     # Submit command to operating system
     print('Running TauDEM GageWatershed...')
     os.system(cmd)
     # Capture the contents of shell command and print it to the arcgis dialog box
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-    
+
     message = "\n"
     for line in process.stdout.readlines():
         if isinstance(line, bytes):	    # true in Python 3
             line = line.decode()
         message = message + line
-    print(message)                               
-        
+    print(message)
+
     return
-    
+
 # ==========================================================================
-#   For clipping features  
-# ==========================================================================         
+#   For clipping features
+# ==========================================================================
 def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
     print('Clipping streamlines to site DEM...')
-    
+
     tmp = os.path.dirname(str_dem_path) + "/mask.tif" # tmp DEM mask
-    
-    # convert DEM to binary raster  
+
+    # convert DEM to binary raster
     with rasterio.open(str(str_dem_path)) as ds_dem:
         arr_dem = ds_dem.read(1)
         profile = dict(ds_dem.profile)
@@ -396,24 +396,24 @@ def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
     # Polygonize binary raster
     mask = None
     with rasterio.open(tmp) as src:
-        image = src.read(1) 
+        image = src.read(1)
         results = (
         {'properties': {'raster_val': v}, 'geometry': s}
         for i, (s, v) in enumerate(
             shapes(image, mask=mask, transform=src.transform)))
 
-    poly = next(results)   
-    poly_shp = shape(poly['geometry'])    
+    poly = next(results)
+    poly_shp = shape(poly['geometry'])
 
 
     # Now clip/intersect the streamlines file with results via Shapely...
     with fiona.open(str_lines_path) as lines:
-        # Get the subset that falls within bounds of polygon...        
+        # Get the subset that falls within bounds of polygon...
         subset = lines.filter(bbox=shape(poly['geometry']).bounds)
         lines_schema = lines.schema
-        lines_crs = lines.crs     
+        lines_crs = lines.crs
         with fiona.open(output_filename, 'w', 'ESRI Shapefile', lines_schema, lines_crs) as dst:
-            for line in subset:  
+            for line in subset:
                 if shape(line['geometry']).within(poly_shp):
                     dst.write(line)
 
@@ -421,8 +421,8 @@ def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
     return output_filename
 
 # ==========================================================================
-#   Polygonize watersheds  
-# ==========================================================================         
+#   Polygonize watersheds
+# ==========================================================================
 def watershed_polygonize(in_tif, out_shp):
     print ("Polygonizing watersheds...")
     # tmp = "D:\\git_projects\\sample_data\\0206\\0206000403\\0206000403_breach_w_temp.shp" # tmp file
@@ -431,7 +431,7 @@ def watershed_polygonize(in_tif, out_shp):
     # convert the raster to polygon
     mask = None
     with rasterio.open(in_tif) as src:
-        image = src.read(1) 
+        image = src.read(1)
         results = (
             {'properties': {'raster_val': v}, 'geometry': s}
             for i, (s, v) in enumerate(
@@ -451,7 +451,7 @@ def watershed_polygonize(in_tif, out_shp):
         with fiona.open(out_shp, 'w', **meta) as output:
             # sort and then perform groupby on raster_vals
             by_vals = sorted(input, key=lambda k: k['properties']['raster_val'])
-            # group by 'raster_val' 
+            # group by 'raster_val'
             for key, group in itertools.groupby(by_vals, key=lambda x:x['properties']['raster_val']):
                 properties, geom = zip(*[(feature['properties'],shape(feature['geometry'])) for feature in group])
                 # perform check and exclude nodata value
@@ -463,7 +463,7 @@ def watershed_polygonize(in_tif, out_shp):
 
 # ==========================================================================
 #   join watersheds attributes
-# ==========================================================================      
+# ==========================================================================
 def join_watershed_attrs(w, physio, net, output):
     # 1 - read in watershed polygons
     wsheds = gpd.read_file(w) # watershed grid shp
@@ -476,7 +476,7 @@ def join_watershed_attrs(w, physio, net, output):
     pointsInPhysio = sjoin(points, physio, how='left') # spatial join
 
     # 4 - merge attrs to watershed polygons
-    net = gpd.GeoDataFrame.from_file(net) 
+    net = gpd.GeoDataFrame.from_file(net)
 
     # 4.1 - rename columns
     wsheds = wsheds.rename(columns={'raster_val':'LINKNO'})
@@ -511,7 +511,7 @@ def callback(s):
             else:
                 print("{}".format(s))
     except:
-        print(s)    
+        print(s)
 
 # ===============================================================================
 #  Create weight file for TAuDEM D8 FAC
@@ -525,10 +525,10 @@ def create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts
     lst_x=[]
     lst_y=[]
 
-    with fiona.open(str_streamlines_path) as lines:        
-        
+    with fiona.open(str_streamlines_path) as lines:
+
         streamlines_crs = lines.crs # to use in the output grid
-        
+
         # Get separate lists of start and end points...
         for line in lines:
             if line['geometry']['type'] == 'LineString': # Make sure it's a LineString
@@ -536,29 +536,29 @@ def create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts
                 lst_coords.append(line['geometry']['coordinates'][-1])
                 # Add startpts...
                 lst_pts.append(line['geometry']['coordinates'][0])
-                
-        # If a start point is not also in the endpt list, it's first order...        
-        for pt in lst_pts:            
-            if pt not in lst_coords: 
+
+        # If a start point is not also in the endpt list, it's first order...
+        for pt in lst_pts:
+            if pt not in lst_coords:
                 lst_x.append(pt[0])
                 lst_y.append(pt[1])
-                                   
+
     # Open DEM to copy metadata and write a Weight Grid (WG)...
-    with rasterio.open(str_dem_path) as ds_dem:            
-        out_meta = ds_dem.meta.copy() 
+    with rasterio.open(str_dem_path) as ds_dem:
+        out_meta = ds_dem.meta.copy()
         out_meta.update(compress='lzw')
-        out_meta.update(dtype=rasterio.int16)  
+        out_meta.update(dtype=rasterio.int16)
         out_meta.update(nodata=-9999)
         out_meta.update(crs=lines.crs) # shouldn't be necessary
-        
+
         # Construct the output array...
-        arr_danglepts=np.zeros([out_meta['height'], out_meta['width']], dtype=out_meta['dtype']) 
-        
+        arr_danglepts=np.zeros([out_meta['height'], out_meta['width']], dtype=out_meta['dtype'])
+
         tpl_pts = transform(streamlines_crs, out_meta['crs'], lst_x, lst_y)
         lst_dangles = zip(tpl_pts[0], tpl_pts[1])
 
-        for coords in lst_dangles:                        
-            col, row = ~ds_dem.transform * (coords[0], coords[1]) # BUT you have to convert coordinates from hires to dem  
+        for coords in lst_dangles:
+            col, row = ~ds_dem.transform * (coords[0], coords[1]) # BUT you have to convert coordinates from hires to dem
             try:
                 arr_danglepts[int(row),int(col)] = 1
             except:
@@ -566,17 +566,17 @@ def create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts
     #            # Could save these points here for later use building the streamlines??
     #            tpl_pts=(row,col)
     #            lst_finalpts_rowcols.append(tpl_pts)
-        
+
     # Now write the new grid using this metadata...
     with rasterio.open(str_danglepts_path, "w", **out_meta) as dest:
         dest.write(arr_danglepts, indexes=1)
-                        
+
 #    # Now write out the dangle points into a new shapefile...
 #    print('pause')
-#    test_schema = {'geometry': 'Point', 'properties': {'linkno': 'int'}} 
-#    
+#    test_schema = {'geometry': 'Point', 'properties': {'linkno': 'int'}}
+#
 #    str_dangles_path= r'C:\USGS_TerrainBathymetry_Project\CBP_analysis\DifficultRun\facet_tests\dr_nhd_hires_dangles.shp'
-#       
+#
 #    print('Building and Writing Dangle Point File...')
 #    with fiona.open(str_dangles_path, 'w', driver='ESRI Shapefile', crs=streamlines_crs, schema=test_schema) as dangles:
 #
@@ -584,24 +584,24 @@ def create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts
 #        for coords in lst_dangles:
 #            pt = {'type': 'Point', 'coordinates':coords}
 #            prop = {'linkno': 1}
-#            dangles.write({'geometry':pt, 'properties':prop})         
-        
-    return 
+#            dangles.write({'geometry':pt, 'properties':prop})
+
+    return
 
 ## ===============================================================================
 ##  Get row/col coords of start pts from weight grid
 ## ===============================================================================
 #def get_rowcol_from_wg(str_danglepts_path):
-#    
+#
 #    print('Reading weight grid...')
 #    with rasterio.open(str_danglepts_path) as ds_wg:
 #        wg_rast = ds_wg.read(1) # numpy array
 ##        wg_crs = ds_wg.crs
 ##        wg_affine = ds_wg.affine
-#        
+#
 #    print('Getting indices...')
-#    row_cols = np.where(wg_rast>0)    
-#    
+#    row_cols = np.where(wg_rast>0)
+#
 #    return row_cols
 
 ## ===============================================================================
@@ -609,7 +609,7 @@ def create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts
 ## ===============================================================================
 def default_callback(str):
     print(str)
-    
+
 def run_gospatial_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback = default_callback):
     try:
         os.chdir(exe_path)
@@ -638,7 +638,7 @@ def run_gospatial_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback
     except Exception as e:
         print(e)
         return 1
-        
+
 def run_rust_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback = default_callback):
     try:
         os.chdir(exe_path)
@@ -679,17 +679,17 @@ def run_rust_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback = de
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as err:
         callback(str(err))
-        return 1       
-        
+        return 1
+
 # ===============================================================================
 #  Mega-function for processing a raw DEM
 #   1. Breaching and filling
 #   2. TauDEM functions
-# ===============================================================================        
+# ===============================================================================
 def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID):
     try:
         inputProc = str(2) # number of cores to use for TauDEM processes
-               
+
         # << Define all filenames here >>
         str_dem_path             = os.path.join(root, f'{hucID}_dem_proj.tif')
         breach_filepath_tif_tmp  = os.path.join(root, f'{hucID}_breach_tmp_proj.tif')
@@ -712,23 +712,23 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         dd                 = os.path.join(root, f'{hucID}_breach_hand.tif')
         wshed_physio       = os.path.join(root, f'{hucID}_breach_w_diss_physio.shp')
 
-        # print ("01", str_dem_path)	                
-        # print ("02", breach_filepath_tif_tmp)	            
-        # print ("03", breach_filepath_tif_proj)	            
-        # print ("04", breach_filepath_dep)	      
-        # print ("05", str_danglepts_path) 
-        # print ("11", p)	                        
-        # print ("12", sd8)	                        
-        # print ("13", ad8_wg)	                    
-        # print ("15", ad8_no_wg)	                
-        # print ("16", ord_g)	                    
-        # print ("17", tree)	                    
-        # print ("18", coord)	                    
-        # print ("19", net)	                        
-        # print ("20", w)	                        
-        # print ("21", slp)	                        
-        # print ("22", ang)	                        
-        # print ("23", dd)	
+        # print ("01", str_dem_path)
+        # print ("02", breach_filepath_tif_tmp)
+        # print ("03", breach_filepath_tif_proj)
+        # print ("04", breach_filepath_dep)
+        # print ("05", str_danglepts_path)
+        # print ("11", p)
+        # print ("12", sd8)
+        # print ("13", ad8_wg)
+        # print ("15", ad8_no_wg)
+        # print ("16", ord_g)
+        # print ("17", tree)
+        # print ("18", coord)
+        # print ("19", net)
+        # print ("20", w)
+        # print ("21", slp)
+        # print ("22", ang)
+        # print ("23", dd)
 
 #        # ==================== TauDEM Paths =========================
         # Hardcode paths from user input...
@@ -737,9 +737,9 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         areaD8          = '"' + str_taudem_path + '\AreaD8.exe"'
         streamnet       = '"' + str_taudem_path + '\StreamNet.exe"'
         dinfflowdir     = '"' + str_taudem_path + '\DinfFlowDir.exe"'
-        dinfdistdown    = '"' + str_taudem_path + '\DinfDistDown.exe"'        
-               
-                
+        dinfdistdown    = '"' + str_taudem_path + '\DinfDistDown.exe"'
+
+
         # ========== << 1. Breach Depressions with GoSpatial/Whitebox Tool >> ==========
         '''
         This tool is used to remove the sinks (i.e. topographic depressions and flat areas) from digital elevation models (DEMs) using a highly efficient and flexible breaching, or carving, method.
@@ -748,8 +748,8 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         Arg Name: MaxDepth, type: float64, Description: The maximum breach channel depth (-1 to ignore)
         Arg Name: MaxLength, type: int, Description: The maximum length of a breach channel (-1 to ignore)
         Arg Name: ConstrainedBreaching, type: bool, Description: Use constrained breaching?
-        Arg Name: SubsequentFilling, type: bool, Description: Perform post-breach filling?    
-        '''     
+        Arg Name: SubsequentFilling, type: bool, Description: Perform post-breach filling?
+        '''
         # =================== << Whitebox Functions >> =====================
         if run_whitebox:
 
@@ -764,104 +764,104 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
                 subprocess.check_call(exec_WBT)
             except subprocess.CalledProcessError:
                 sys.exit(0)
-            
+
             define_grid_projection(breach_filepath_tif_tmp, dst_crs, breach_filepath_tif_proj)
-            
+
             ## Remove native Whitebox files and unprojected tif:
             # dep_path=path_to_dem + '\\' + breach_filename_dep
             # tas_path=path_to_dem + '\\' + breach_filename_dep[:-3]+'tas'
             # os.remove(dep_path)
-            # os.remove(tas_path) 
+            # os.remove(tas_path)
             # os.remove(breach_filepath_tif)
             """
             print('Whitebox .exe path:  ' + 'r' + '"' + str_whitebox_path + '"')
-            str_whitebox_dir, str_whitebox_exe = os.path.split(str_whitebox_path) 
-            
+            str_whitebox_dir, str_whitebox_exe = os.path.split(str_whitebox_path)
+
             ## << Run the BreachDepressions tool, specifying the arguments >>
-            name = "BreachDepressions"        
+            name = "BreachDepressions"
             args = [dem_filename_tif, breach_filename_dep, '-1', '-1', 'True', 'True'] # GoSpatial verion. NOTE:  Make these last four variables accessible to user?
 #            args = ['--dem='+dem_filename, '-o='+breach_filename_dep] # Rust version
-            
+
             ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
 #            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
             if ret != 0:
-                print("ERROR: return value={}".format(ret)) 
-                
+                print("ERROR: return value={}".format(ret))
+
             ##  << Convert .dep to .tif here? >>  NOTE:  Only for DRB hack when using .dep files
             name = "WhiteBox2GeoTiff"
-            args = [breach_filename_dep, breach_filename_tif] 
-            
+            args = [breach_filename_dep, breach_filename_tif]
+
             ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
             if ret != 0:
-                print("ERROR: return value={}".format(ret))  
+                print("ERROR: return value={}".format(ret))
 
-            ## The converted TIFF file is saved without a crs, so save a projected version:                        
+            ## The converted TIFF file is saved without a crs, so save a projected version:
             define_grid_projection(breach_filepath_tif, dst_crs, breach_filepath_tif_proj)
-            
+
             ## Remove native Whitebox files and unprojected tif:
             dep_path=path_to_dem + '\\' + breach_filename_dep
             tas_path=path_to_dem + '\\' + breach_filename_dep[:-3]+'tas'
             os.remove(dep_path)
-            os.remove(tas_path) 
+            os.remove(tas_path)
             os.remove(breach_filepath_tif)
             sys.exit
             """
 #            # Rust version...
 #            name = "ConvertRasterFormat"
 #            args = ['--input='+breach_filename_dep, '-o='+breach_filename_tif]
-#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)                
-                
+#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
+
 #            # << Also convert original DEM .dep to a .tif >>
 #            name = "WhiteBox2GeoTiff"
-#            args = [dem_filename, dem_filename_tif] 
-#            
+#            args = [dem_filename, dem_filename_tif]
+#
 #            ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
 #            if ret != 0:
-#                print("ERROR: return value={}".format(ret))    
-                
+#                print("ERROR: return value={}".format(ret))
+
             # Rust version...
 #            name = "ConvertRasterFormat"
 #            args = ['--input='+dem_filename, '-o='+dem_filename_tif]
-#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)                
-        
+#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
+
         if run_wg:
-            create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts_path)       
-            
+            create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts_path)
+
         if run_taudem:
 
              # Testing...
 #            mpipath = 'r' +  '"' + mpipath + '"'
 #            fel = 'r' +  '"' + fel + '"'
-            
-#            print('mpipath: ' + mpipath)            
+
+#            print('mpipath: ' + mpipath)
 #            print('fel: ' + fel_breach)
 #            print(' ')
-            
-#            # ==============  << 1. Pit Filling with TauDEM >> ================ 
+
+#            # ==============  << 1. Pit Filling with TauDEM >> ================
 #            cmd = 'mpiexec' + ' -n ' + inputProc + ' PitRemove -z ' + '"' + str_dem_path_tif + '"' + ' -fel ' + '"' + fel_pitremove + '"'
-#            
+#
 #            # Submit command to operating system
 #            print('Running TauDEM PitRemove...')
 #            os.system(cmd)
-#            
+#
 #            # Capture the contents of shell command and print it to the arcgis dialog box
 #            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-#            
+#
 #            # Get some feedback from the process to print out...
 #            message = "\n"
 #            for line in process.stdout.readlines():
 #                line = line.decode()
 #                if isinstance(line, bytes):	   # true in Python 3
 #                    line = line.decode()
-#                message = message + line        
-#            print(message)                            
- 
-            # ==============  << 2. D8 FDR with TauDEM >> ================       YES 
+#                message = message + line
+#            print(message)
+
+            # ==============  << 2. D8 FDR with TauDEM >> ================       YES
 #            cmd = '"' + mpipath + '"' + ' -n ' + inputProc + ' ' + d8flowdir + ' -fel ' + '"' + str_dem_path + '"' + ' -p ' + '"' + p + '"' + \
 #                  ' -sd8 ' + '"' + sd8 + '"'
-                  
+
             # cmd = 'mpiexec' + ' -n ' + inputProc + ' d8flowdir -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -p ' + '"' + p + '"' + \
-            #       ' -sd8 ' + '"' + sd8 + '"'                  
+            #       ' -sd8 ' + '"' + sd8 + '"'
             # print (cmd)
 
             cmd = f'mpiexec -n {inputProc} d8flowdir -fel "{breach_filepath_tif_proj}" -p "{p}" -sd8 "{sd8}"'
@@ -869,19 +869,19 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
             # Submit command to operating system
             print('Running TauDEM D8 Flow Direction...')
             os.system(cmd)
-#            
+#
             # Capture the contents of shell command and print it to the arcgis dialog box
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-            
+
             # Get some feedback from the process to print out...
             message = "\n"
             for line in process.stdout.readlines():
                 line = line.decode()
                 if isinstance(line, bytes):	   # true in Python 3
                     line = line.decode()
-                message = message + line        
-            print(message)    
-                
+                message = message + line
+            print(message)
+
     #        # ============= << 3.a AD8 with weight grid >> ================        YES
     #        cmd = 'mpiexec -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_wg + '"'  + ' -wg ' + '"' + str_danglepts_path + '"'  + ' -nc '
             # cmd = 'mpiexec' + ' -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_wg + '"'  + ' -wg ' + '"' + str_danglepts_path + '"'  + ' -nc '
@@ -893,55 +893,55 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
             os.system(cmd)
             # Capture the contents of shell command and print it to the arcgis dialog box
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-            
+
             message = "\n"
             for line in process.stdout.readlines():
                 if isinstance(line, bytes):	    # true in Python 3
                     line = line.decode()
                 message = message + line
-            print(message)   
-             
+            print(message)
+
            # ============= << 3.b AD8 no weight grid >> ================
 #        cmd = 'mpiexec -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_no_wg + '"'  +  ' -nc '
             # cmd = 'mpiexec -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_no_wg + '"'  +  ' -nc '
             cmd = f'mpiexec -n {inputProc} AreaD8 -p "{p}" -ad8 "{ad8_no_wg}" -nc'
-    
+
             # Submit command to operating system
             print('Running TauDEM D8 FAC (no weights)...')
             os.system(cmd)
             # Capture the contents of shell command and print it to the arcgis dialog box
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-            
+
             message = "\n"
             for line in process.stdout.readlines():
                 if isinstance(line, bytes):	    # true in Python 3
                     line = line.decode()
                 message = message + line
-            print(message)            
-           
-           # ============= << 4 StreamReachandWatershed with TauDEM >> ================      
+            print(message)
+
+           # ============= << 4 StreamReachandWatershed with TauDEM >> ================
             # cmd = 'mpiexec -n ' + inputProc + ' StreamNet -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -p ' + '"' + p + '"' + \
             #         ' -ad8 ' + '"' + ad8_no_wg + '"' + ' -src ' + '"' + ad8_wg + '"' + ' -ord ' + '"' + ord_g + '"' + ' -tree ' + \
             #         '"' + tree + '"' + ' -coord ' + '"' + coord + '"' + ' -net ' + '"' + net + '"' + ' -w ' + '"' + w + \
             #         '"'
-            
+
             cmd = f'mpiexec -n {inputProc} StreamNet -fel "{breach_filepath_tif_proj}" -p "{p}" ' \
                   f'-ad8 "{ad8_no_wg}" -src "{ad8_wg}" -ord "{ord_g}" -tree "{tree}" -coord "{coord}" -net "{net}" -w "{w}"'
-        
+
             # Submit command to operating system
             print('Running TauDEM Stream Reach and Watershed...')
             os.system(cmd)
-            
+
             # Capture the contents of shell command and print it to the arcgis dialog box
             process=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-            
+
             message = "\n"
             for line in process.stdout.readlines():
                 if isinstance(line, bytes):	    # true in Python 3
                     line = line.decode()
-                message = message + line        
-            print(message) 
-            
+                message = message + line
+            print(message)
+
             # Let's get rid of some output that we are not currently using...
     #            try:
     #    #            os.remove(w)
@@ -951,33 +951,33 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
     #            except:
     #                print('Warning: Problem removing files!')
     #                pass
-               
-            # ============= << 5. Dinf with TauDEM >> =============        YES        
-            print('Running TauDEM Dinfinity...')        
+
+            # ============= << 5. Dinf with TauDEM >> =============        YES
+            print('Running TauDEM Dinfinity...')
             # cmd = 'mpiexec -n ' + inputProc + ' DinfFlowDir -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -ang ' + '"' + ang + '"' + \
             #     ' -slp ' + '"' + slp + '"'
 
             cmd = f'mpiexec -n {inputProc} DinfFlowDir -fel "{breach_filepath_tif_proj}" -ang "{ang}" -slp "{slp}"'
-            
+
             # Submit command to operating system
             os.system(cmd)
-            
+
             # Capture the contents of shell command and print it to the arcgis dialog box
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-            
+
             # Get some feedback from the process to print out...
             message = "\n"
             for line in process.stdout.readlines():
                 line = line.decode()
         #            if isinstance(line, bytes):	   # true in Python 3
         #                line = line.decode()
-                message = message + line        
-            print(message)            
-            
+                message = message + line
+            print(message)
+
             # ============= << 6. DinfDistanceDown (HAND) with TauDEM >> ============= YES
             distmeth = 'v'
             statmeth = 'ave'
-            
+
             # Use original DEM here...
             print('Running TauDEM Dinf Distance Down...') # Use Breached or Raw DEM here?? Currently using Raw
             # cmd = 'mpiexec -n ' + inputProc + ' DinfDistDown -fel ' + '"' + str_dem_path_tif + '"' + ' -ang ' + '"' + ang + '"' + \
@@ -987,17 +987,17 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
 
             # Submit command to operating system
             os.system(cmd)
-            
+
             # Get some feedback from the process to print out...
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) 
-            
+            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+
             message = "\n"
             for line in process.stdout.readlines():
                 line = line.decode()
         #            if isinstance(line, bytes):	   # true in Python 3
         #                line = line.decode()
                 message = message + line
-                
+
             print(message)
 
             # polygonize watersheds
