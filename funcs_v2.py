@@ -1557,34 +1557,34 @@ def fp_metrics_chsegs(str_fim_path, str_chanmet_segs):
 #    2. Calculate a HAND height (h) for each polygon based on some attribute(s)
 #    3. Delineate FIM per catchment
 #
-# =============================================================================== 
+# ===============================================================================
 def fim_hand_poly(str_hand_path, str_sheds_path, str_reachid):
-    
+
     # Open the HAND layer...
-    with rasterio.open(str(str_hand_path)) as ds_hand:  
-        
+    with rasterio.open(str(str_hand_path)) as ds_hand:
+
         out_meta = ds_hand.meta.copy()
-        arr_fim = np.empty([out_meta['height'], out_meta['width']], dtype=out_meta['dtype'])  
+        arr_fim = np.empty([out_meta['height'], out_meta['width']], dtype=out_meta['dtype'])
         arr_fim[:,:] = out_meta['nodata']
-        
+
         lst_h=[]
         lst_linkno=[]
         lst_prov=[]
 
         # Open the catchment polygon layer...
         with fiona.open(np.str(str_sheds_path), 'r') as sheds:
-        
+
             for shed in sheds:
-                
+
                 # Get the linkno...
                 linkno = shed['properties']['LINKNO']
-                
+
                 # Get the Province...
                 prov = shed['properties']['PROVINCE']
-                
+
                 # Get the Drainage Area in km^2...
                 da_km2 = shed['properties']['DSContArea']/1000000
-                
+
                 if (prov == 'COASTAL PLAIN' and da_km2 >= 3 and da_km2 <= 3000):
                     h = 1.65
                 elif (prov == 'PIEDMONT' and da_km2 >= 3 and da_km2 <= 3000):
@@ -1598,122 +1598,122 @@ def fim_hand_poly(str_hand_path, str_sheds_path, str_reachid):
                     lst_linkno.append(linkno)
                     lst_prov.append(prov)
                     continue # skip this catchment
-                
-                lst_h.append(h)    
+
+                lst_h.append(h)
                 lst_linkno.append(linkno)
                 lst_prov.append(prov)
-                
-#                buff = mapping(shed)                            
-                
+
+#                buff = mapping(shed)
+
                 try:
                     # Mask the bankpts file for each feature...
-                    w, out_transform = rasterio.mask.mask(ds_hand, [shed['geometry']], crop=True)            
-                    
-        
+                    w, out_transform = rasterio.mask.mask(ds_hand, [shed['geometry']], crop=True)
+
+
     #                w[(w<=h) & (w>=0.)] # Get HAND depth below h
                     w[(w>h)] = out_meta['nodata'] # Assign NoData to everywhere else
     #                w[(w<0.)] = out_meta['nodata'] # Assign NoData to everywhere else
-                    
-                    # Now write out the FIM for this shed...
-                    w = w[0]                                                        
-                    shp=np.shape(w)  
-                              
-                    bounds = rasterio.transform.array_bounds(shp[0],shp[1],out_transform) # window bounds in x-y space (west, south, east, north)                                
 
-    #                col_min, row_min = ~ds_hand.transform * (bounds[0], bounds[3]) # RAsterio v1.x upper left row and column of window?                                
+                    # Now write out the FIM for this shed...
+                    w = w[0]
+                    shp=np.shape(w)
+
+                    bounds = rasterio.transform.array_bounds(shp[0],shp[1],out_transform) # window bounds in x-y space (west, south, east, north)
+
+    #                col_min, row_min = ~ds_hand.transform * (bounds[0], bounds[3]) # RAsterio v1.x upper left row and column of window?
                     col_min, row_min = ~ds_hand.transform * (bounds[0], bounds[3])
-                    
-                    row_min = np.int(row_min)                            
+
+                    row_min = np.int(row_min)
                     col_min = np.int(col_min)
                     row_max = np.int(row_min + shp[0])
-                    col_max = np.int(col_min + shp[1])    
-    
+                    col_max = np.int(col_min + shp[1])
+
                     arr_w = np.empty([row_max-row_min, col_max-col_min], dtype=out_meta['dtype'])
                     arr_w[:,:] = arr_fim[row_min:row_max, col_min:col_max]
-    #                
+    #
                     inds_lt = np.where(arr_fim[row_min:row_max, col_min:col_max]<w)
                     arr_w[inds_lt] = w[inds_lt]
-    
-                    arr_fim[row_min:row_max, col_min:col_max] = arr_w # assign the FIM window for this catchment to the total array                                    
-                except:
-                    print('WARNING:  Problem masking HAND grid using catchment Linkno:  ' + str(linkno))                
-                
 
-    
+                    arr_fim[row_min:row_max, col_min:col_max] = arr_w # assign the FIM window for this catchment to the total array
+                except:
+                    print('WARNING:  Problem masking HAND grid using catchment Linkno:  ' + str(linkno))
+
+
+
     # Write out the final FIM grid...
-#    print('Writing final FIM .tif file...')   
+#    print('Writing final FIM .tif file...')
     str_fim_path = str_hand_path[:-4]+'_3sqkm_fim.tif'
     with rasterio.open(str_fim_path, "w", **out_meta) as dest:
-        dest.write(arr_fim, indexes=1) 
-        
+        dest.write(arr_fim, indexes=1)
+
     # Write HAND heights to csv...
     str_csv_path = str_hand_path[:-4]+'_3sqkm_fim_h.csv'
     df_h = pd.DataFrame({str_reachid:lst_linkno, 'prov':lst_prov, 'h':lst_h})
     df_h.to_csv(str_csv_path)
-        
-    return 
-   
+
+    return
+
 # ===============================================================================
 #  Analyze DEM in vertical slices using an individual polygon
-# =============================================================================== 
+# ===============================================================================
 def analyze_hand_2Dxn(w_hnd, parm_ivert, dist_sl, res):
-    
+
     try:
 
         w_min=w_hnd.min()
-        arr_slices = np.arange(w_min+parm_ivert, w_hnd.max(), parm_ivert)    
-        
+        arr_slices = np.arange(w_min+parm_ivert, w_hnd.max(), parm_ivert)
+
         lst_count=[]
         lst_width=[]
-    
+
         # List comprehension here instead??
-        for i_step in arr_slices: 
-    
-            num_pixels = w_hnd[(w_hnd<=i_step) & (w_hnd>=w_min)].size           
+        for i_step in arr_slices:
+
+            num_pixels = w_hnd[(w_hnd<=i_step) & (w_hnd>=w_min)].size
             lst_count.append(num_pixels) # number of pixels greater than or equal to zero and less than the height interval
-                
+
             # Calculate area of FP pixels:
             area_pixels = num_pixels*(res**2)
-            
+
             # Calculate width by stretching it along the length of the 2D Xn:
-            lst_width.append(area_pixels/dist_sl)                 
-    
+            lst_width.append(area_pixels/dist_sl)
+
         df_steps = pd.DataFrame({'count':lst_count, 'height':arr_slices, 'width':lst_width})
-        
-        if len(df_steps.index)<3:    
+
+        if len(df_steps.index)<3:
             return -9999., -9999., -9999., -9999., -9999., -9999.
-        
+
 #        ## Plotting for tests:
-#        ax=df_steps.plot(x='width',y='height', marker='.', logx=False, logy=False)  
-#        ax.set(xlabel='Width', ylabel='Height')        
+#        ax=df_steps.plot(x='width',y='height', marker='.', logx=False, logy=False)
+#        ax.set(xlabel='Width', ylabel='Height')
 #        sys.exit()
-    
+
         ## IDEAS:
-        # 1. Get the coefficients of the 2D polynomial that fits the curve?:      
+        # 1. Get the coefficients of the 2D polynomial that fits the curve?:
     #    a,b,c=np.polyfit(df_steps.height, df_steps.width, 2)
-        
+
         # 2. Split the curve in two parts equally between w_hnd.min and max, then take several ratios:
         # Find the break in slope of the curve (by every fourth point?):
         w1, w2, w3 = jenkspy.jenks_breaks(df_steps.width, nb_class=2)
-        
+
         h1=df_steps.height[df_steps.width==w1].values[0]
         h2=df_steps.height[df_steps.width==w2].values[0]
         h3=df_steps.height[df_steps.width==w3].values[0]
-        
+
         # slope upper/slope lower:
         slope_lower=(w2-w1)/(h2-h1)
         slope_upper=(w3-w2)/(h3-h2)
         slp_ratio=slope_lower/slope_upper
-        
+
         # rugosity upper/lower:  (actual area/planar area)
         arr2=w_hnd[w_hnd<=h2]
         arr3=w_hnd[w_hnd<=h3]
-        
+
         rugosity2=rugosity(arr2, res)
         rugosity3=rugosity(arr3, res)
-        
+
         rug_ratio=rugosity2/rugosity3
-        
+
     except Exception as e:
         print(f'Error in analyze_2D_xns:  {str(e)}')
         slope_lower=-9999.
@@ -1866,158 +1866,158 @@ def  channel_width_from_bank_pixels(df_coords, str_streamlines_path, str_bankpix
 
 # ===============================================================================
 #  Searchable window with center pixel defined by get_stream_coords_from_features
-# ===============================================================================  
+# ===============================================================================
 def bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, cell_size, use_wavelet_method):
-    
+
     print('Bank pixels from curvature windows...')
-    
+
     # Convert df_coords x-y to row-col via DEM affine
     # Loop over center row-col pairs accessing the window
     # Now loop over the linknos to get access grid by window...
-    
+
     # << PARAMETERS >>
     cell_size=int(cell_size)
-    
+
     # 3 m...
     w_height=20 # number of rows
     w_width=20  # number of columns
-    buff=3 # number of cells    
-    curve_thresh=0.30 # good for 3m DEM?    
-    
+    buff=3 # number of cells
+    curve_thresh=0.30 # good for 3m DEM?
+
     # 10 m...
 #    w_height=20 # number of rows
 #    w_width=20  # number of columns
-#    buff=3 # number of cells    
-#    curve_thresh=0.30 # good for 3m and 10m DEM?     
-    
+#    buff=3 # number of cells
+#    curve_thresh=0.30 # good for 3m and 10m DEM?
+
 #    j=0
-    
+
 #    lst_linknos=[]
 #    lst_x1=[]
 #    lst_y1=[]
 #    lst_x2=[]
-#    lst_y2=[]    
-    
-    j=0   
+#    lst_y2=[]
+
+    j=0
 #    progBar = self.progressBar
-#    progBar.setVisible(True)   
-    
+#    progBar.setVisible(True)
+
     try:
-        
+
         sigma=1.0 # select the scale sigma=1 --> NOTE:  FIND THIS ON THE FLY? (within each window?)
-        g2x1,g2y1 = gauss_kern(sigma) 
-        
+        g2x1,g2y1 = gauss_kern(sigma)
+
         with rasterio.open(str_dem_path) as ds_dem:
-        
+
             # Transform to pixel space
-            df_coords['col'], df_coords['row'] = ~ds_dem.transform * (df_coords['x'], df_coords['y'])   
-            
-            df_coords[['row','col']] = df_coords[['row','col']].astype(np.int32)  
+            df_coords['col'], df_coords['row'] = ~ds_dem.transform * (df_coords['x'], df_coords['y'])
+
+            df_coords[['row','col']] = df_coords[['row','col']].astype(np.int32)
             df_coords.drop_duplicates(['col','row'], inplace=True) # rounding to integer
-            total_len = len(df_coords.index)
-            
-            out_meta = ds_dem.meta.copy()      
+            # total_len = len(df_coords.index)
+
+            out_meta = ds_dem.meta.copy()
             out_meta['dtype'] = rasterio.uint8 # no need for float32 for bankpixels to save size of output
             out_meta['compress'] = 'lzw'
-            
-            arr_bankpts=np.zeros([out_meta['height'], out_meta['width']], dtype=out_meta['dtype'])         
-            
-    #        progBar.setRange(0, len(df_coords.index)) 
-            
+
+            arr_bankpts=np.zeros([out_meta['height'], out_meta['width']], dtype=out_meta['dtype'])
+
+    #        progBar.setRange(0, len(df_coords.index))
+
             for tpl_row in df_coords.itertuples():
-                
+
 #                if tpl_row.order != 6:
 #                    continue
-#                
+#
                 if tpl_row.order == 5:
-                    w_height=30 # number of rows
-                    w_width=30  # number of columns
+                    w_height=40 # number of rows
+                    w_width=40  # number of columns
                 if tpl_row.order >= 6:
-                    w_height=70
-                    w_width=70
+                    w_height=80
+                    w_width=80
 
 #                if tpl_row.linkno != 1368: continue
-                
+
     #            progBar.setValue(j)
                 j+=1
-                
+
 #                print('{} | {} -- {}'.format(tpl_row.linkno, j, total_len))
-                
+
                 row_min = np.int(tpl_row.row - np.int(w_height/2))
                 row_max = np.int(tpl_row.row + np.int(w_height/2))
                 col_min = np.int(tpl_row.col - np.int(w_width/2))
-                col_max = np.int(tpl_row.col + np.int(w_width/2))            
-                
+                col_max = np.int(tpl_row.col + np.int(w_width/2))
+
                 # Now get the DEM specified by this window as a numpy array...
-                w = ds_dem.read(1, window=((row_min, row_max),(col_min, col_max))) 
-                                
+                w = ds_dem.read(1, window=((row_min, row_max),(col_min, col_max)))
+
                 # Then extract the internal part of the window that contains the rotated window??
                 w[w > 9999999.0] = 0.0 # NoData values may have been corrupted by preprocessing?
                 w[w < -9999999.0] = 0.0
-                
+
                 if np.size(w) > 9: # make sure a window of appropriate size was returned from the DEM
-                
+
                     if use_wavelet_method:
                         # === Wavelet Curvature from Chandana ===
-                        gradfx1 = signal.convolve2d(w, g2x1, boundary='symm', mode='same') 
-                        gradfy1 = signal.convolve2d(w, g2y1, boundary='symm', mode='same')     
-                        
-                        w_curve=gradfx1+gradfy1                    
-    
-                        # Pick out bankpts...                    
+                        gradfx1 = signal.convolve2d(w, g2x1, boundary='symm', mode='same')
+                        gradfy1 = signal.convolve2d(w, g2y1, boundary='symm', mode='same')
+
+                        w_curve=gradfx1+gradfy1
+
+                        # Pick out bankpts...
                         w_curve[w_curve<np.max(w_curve)*curve_thresh] = 0.
-                    
-#                    plt.imshow(lum_img, cmap="hot") #, vmin=-2, vmax=2)   
-#                    plt.colorbar()    
+
+#                    plt.imshow(lum_img, cmap="hot") #, vmin=-2, vmax=2)
+#                    plt.colorbar()
 #                    fig = plt.figure()
 #                    n, bins, patches=plt.hist(w_curve.flatten(), bins=256, range=(-5, 5), fc='k', ec='k')    # get the histogram
 #                    plt.xlabel('Curvature')
 #                    plt.ylabel('Probability')
-#                    plt.title('Histogram')                    
-#                    plt.show()      
-#                    
+#                    plt.title('Histogram')
+#                    plt.show()
+#
 #                    if j > 4:
 #                        sys.exit()
                     # =======================================
-                    
+
                     else:
-                        # === Mean Curvature ====================                                
+                        # === Mean Curvature ====================
                         Zy, Zx = np.gradient(w, cell_size)
                         Zxy, Zxx = np.gradient(Zx, cell_size)
-                        Zyy, _ = np.gradient(Zy, cell_size)                                                
-                  
+                        Zyy, _ = np.gradient(Zy, cell_size)
+
                         try:
                             w_curve = (Zx**2 + 1)*Zyy - 2*Zx*Zy*Zxy + (Zy**2 + 1)*Zxx
                             w_curve = -w_curve/(2*(Zx**2 + Zy**2 + 1)**(1.5))
                         except:
                             print('Error calculating Curvature in window...skipping')
                             continue
-                                                
+
                         w_curve[w_curve<np.max(w_curve)*curve_thresh] = 0.
                         # =======================================
-                    
+
                     w_curve[w_curve < -99999999.] = 0.
                     w_curve[w_curve > 99999999.] = 0.
-                    
+
                     w_curve[w_curve > 0.] = 1.
 
                     # Note:  This assumes that the w_curve window is the specified size, which is not always the case for edge reaches...
                     arr_bankpts[row_min+buff:row_max-buff, col_min+buff:col_max-buff] = w_curve[buff:w_height-buff, buff:w_width-buff]
-                             
+
                     out_meta['nodata'] = 0.
-                    
+
             print('Writing bank pixels .tif...')
             with rasterio.open(str_bankpixels_path, "w", **out_meta) as dest:
                 dest.write(arr_bankpts.astype(rasterio.uint8), indexes=1)
 #                dest.write(arr_bankpts, indexes=1)
-                               
+
     except Exception as e:
-        print('\r\nError in bankpixels_from_curvature_window. Exception: {} \n'.format(e))        
-            
+        print('\r\nError in bankpixels_from_curvature_window. Exception: {} \n'.format(e))
+
 #        df_dist = pd.DataFrame(lst_dist)
-    
+
     return
-    
+
 # ===============================================================================
 #  Calculate angle from vertical of left and right banks
 # ===============================================================================
@@ -2099,7 +2099,7 @@ def find_bank_angles(tpl_bfpts, lst_total_slices, xn_len, xn_elev_n, parm_ivert,
     except Exception as e:
         print('\r\nError in find_bank_angles. Exception: {} \n'.format(e))
 
-    return tpl_angles   
+    return tpl_angles
 # ===============================================================================
 # Search Xn outward to the right to find the first point greater than the left bank
 # ===============================================================================
@@ -2137,7 +2137,7 @@ def interp_bank(x1,x2,y1,y2,y_uk):
 
     x_uk = (((x2 - x1)*(y_uk - y1))/(y2-y1)) + x1;
 
-    return x_uk   
+    return x_uk
 # ===============================================================================
 # Search for banks via slope break and vertical slices
 # ===============================================================================
@@ -2292,8 +2292,8 @@ def find_bank_ratio_method(lst_total, ratio_threshold, xnelev_zero, slp_thresh):
         print('\r\nError in find_bank_ratio_method. Exception: {} \n'.format(e))
 
     return tpl_bfpts
-    
-# ===============================================================================    
+
+# ===============================================================================
 # Check for continuity in vertical cross section slices
 # ===============================================================================
 def is_contiguous(gtzero_inds):
@@ -2309,10 +2309,10 @@ def is_contiguous(gtzero_inds):
         bool_cont = False
 
     return bool_cont
-    
+
 # ===============================================================================
 #    Analyze the elevation profile of each Xn and determine metrics
-# ===============================================================================    
+# ===============================================================================
 def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, param_slpthreshold, nodata_val):
     """
         Input:  List of elevation values at points along all Xn's.  Each input list entry
@@ -2335,28 +2335,28 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
     lst_bfmetrics = [] # list of tuples to contain output
 
     try:
-        
+
 #        # =========== Progress Dialog ================
 #        progDialog = QtGui.QProgressDialog("", "Cancel", 0, len(df_xn_elev.index), self)
 #        progDialog.setGeometry(200, 80, 300, 20)
 #        progDialog.setWindowTitle('Calculating metrics from Xn\'s...')
 #        progDialog.setWindowModality(QtCore.Qt.WindowModal)
 #        progDialog.show()
-#        # ============================================  
-        
+#        # ============================================
+
 #        progDialog.setRange(0, len(df_xn_elev.index))
-        
+
 #        j=0
         for tpl_row in df_xn_elev.itertuples():
-            
+
 #            progDialog.value(j)
 #            j+=1
-            
+
             this_linkno = tpl_row.linkno
 #            this_order = tpl_row.strmord
-            
+
 #            print('this_linkno: {} | index: {}'.format(this_linkno, tpl_row.Index))
-            
+
 #            if tpl_row.Index == 2254:
 #                print('pause')
 
@@ -2365,13 +2365,13 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
 
             arr_elev = tpl_row.elev
             arr_elev = arr_elev[arr_elev != np.float32(nodata_val)]
-                
+
             # Normalize elevation to zero...
-            thisxn_norm = arr_elev - np.min(arr_elev)                
-            thisxn_norm = tpl_row.elev - np.min(tpl_row.elev)    
+            thisxn_norm = arr_elev - np.min(arr_elev)
+            thisxn_norm = tpl_row.elev - np.min(tpl_row.elev)
             # Below is if you're using the breached DEM...
 #            if this_order < 5:
-#                thisxn_norm = arr_elev - np.min(arr_elev)                
+#                thisxn_norm = arr_elev - np.min(arr_elev)
 #                thisxn_norm = tpl_row.elev - np.min(tpl_row.elev)
 #            else:
 #                # for order>5...(THIS ASSUMES YOU'RE USING THE BREACHED DEM, may not be necessary otherwise)
@@ -2385,7 +2385,7 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
 
                 # The indices of positives...
                 gtzero_indices = np.nonzero((this_slice - thisxn_norm) > 0)[0] # Zero index get the first element of the returned tuple
-                
+
                 # NOTE:  DO THIS IN TERMS OF MAP COORDINATES HERE??
 
                 # Use funtion to check if contiguous...
@@ -2414,16 +2414,16 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
                             lst_total_cnt.append(this_arr)
                             prev_val = this_arr[0]
                             break
-                
+
                 # NOTE:  DO THIS IN TERMS OF MAP COORDINATES HERE??
-                tpl_bankfullpts = find_bank_ratio_method(lst_total_cnt,param_ratiothreshold,thisxn_norm,param_slpthreshold) 
+                tpl_bankfullpts = find_bank_ratio_method(lst_total_cnt,param_ratiothreshold,thisxn_norm,param_slpthreshold)
 
                 if tpl_bankfullpts: # test to see if there's anything in there?? THIS SEEMS LIKE KIND OF A HACK?
 
                     if tpl_bankfullpts[0] - tpl_bankfullpts[1] == 0: # BF points are so close that rounding to int gives identical values
                         # print('pause')
-                        break                                   
-                
+                        break
+
                     # Add Xn number to the output...
                     #xn_elev_norm = tpl_thisxn[2] - np.min(tpl_thisxn[2]) # normalized elevation profile
                     xn_length = len(thisxn_norm)
@@ -2442,9 +2442,9 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
                     # Round up on left, round down on right
                     bf_area = 0
                     lst_bf_rng = range(int(ceil(tpl_bankfullpts[1])),int(tpl_bankfullpts[2])+1,1)
-                    
+
                     for i in lst_bf_rng:
-                        bf_area += (tpl_bankfullpts[3] - thisxn_norm[i])*xn_ptdist                        
+                        bf_area += (tpl_bankfullpts[3] - thisxn_norm[i])*xn_ptdist
 
                     # Channel width...
                     ch_width = (tpl_bankfullpts[2]-tpl_bankfullpts[1])*xn_ptdist
@@ -2454,12 +2454,12 @@ def analyze_xnelev(df_xn_elev, param_ivert, xn_ptdist, param_ratiothreshold, par
 #                        overbank_ratio = -9999.0
 #                    else:
 #                        overbank_ratio = len(lst_total_cnt[-1])/(tpl_bankfullpts[2]-tpl_bankfullpts[1])
-                        
+
                     try:
                         overbank_ratio = len(lst_total_cnt[-1])/(tpl_bankfullpts[2]-tpl_bankfullpts[1])
                     except:
                         overbank_ratio = -9999.0
-                        
+
                     if bf_area == 0:
 #                        print('pause')
                         bf_area=-9999.0
@@ -2593,10 +2593,10 @@ def chanmetrics_bankpts(df_xn_elev, str_xnsPath, str_demPath, str_bankptsPath, p
                     prop_rt = {'xn_num':int(tpl_row.Index),'linkno':int(tpl_row.linkno_x),'bank_hght':tpl_row.bank_height,'bank_elev':tpl_row.bank_elev,
                             'bnk_ang_2':tpl_row.rt_bank_ang,'bf_area':tpl_row.bankful_area,'bnk_ang_1':-9999.,
                             'chan_width':tpl_row.chan_width,'obank_rat':tpl_row.overbank_ratio,'area_ratio':tpl_row.area_ratio}
-                            
-                    bankpts.write({'geometry': lf_pt, 'properties':prop_lf})  
+
+                    bankpts.write({'geometry': lf_pt, 'properties':prop_lf})
                     bankpts.write({'geometry': rt_pt, 'properties':prop_rt})
-                    
+
 #                sys.exit() # for testing
 
 ## ==================================================================================
