@@ -1722,146 +1722,171 @@ def analyze_hand_2Dxn(w_hnd, parm_ivert, dist_sl, res):
         rugosity2=-9999.
         rugosity3=-9999.
         rug_ratio=-9999.
-    
+
     return slope_lower, slope_upper, slp_ratio, rugosity2, rugosity3, rug_ratio
 
 # ===============================================================================
 #  Calculates channel width and sinuosity using parallel offset buffering
-# ===============================================================================    
-def  channel_width_from_bank_pixels(df_coords, str_streamlines_path, str_bankpixels_path, str_reachid, cell_size, i_step, max_buff):
-    
-    print('Channel width from bank pixels -- segmented reaches...')
+# ===============================================================================
+def  channel_width_from_bank_pixels(df_coords, str_streamlines_path, str_bankpixels_path, str_reachid, cell_size, i_step, max_buff, str_chanmet_segs):
+    print ('Channel width from bank pixels -- segmented reaches...')
+    j = 0
+    #    progBar = self.progressBar
+    #    progBar.setVisible(True)
 
-    j=0   
-#    progBar = self.progressBar
-#    progBar.setVisible(True) 
-
-    # Successive buffer-mask operations to count bank pixels at certain intervals
-    lst_buff=range(cell_size,max_buff,cell_size)    
-    
-    # Create the filename and path for the output file... # NOT OS INDEPENDENT??
-    head, tail = os.path.split(str_streamlines_path)    
-    str_outname = tail[:-4] + '_ch_width.shp'
-    str_outpath = head + '/' + str_outname 
-    
     gp_coords = df_coords.groupby('linkno')
-    
+
     ## Schema for the output properties file:
-    schema_output = {'geometry': 'LineString', 'properties': {'linkno':'int','ch_wid_total':'float', 'ch_wid_1':'float', 'ch_wid_2':'float', 'dist_sl':'float', 'dist':'float', 'sinuosity':'float'}}                                  
-        
+    schema_output = {'geometry': 'LineString',
+                     'properties': {'linkno': 'int', 'ch_wid_total': 'float', 'ch_wid_1': 'float', 'ch_wid_2': 'float',
+                                    'dist_sl': 'float', 'dist': 'float', 'sinuosity': 'float', 'order': 'int'}}
+
     # Access the bank pixel layer...
-    with rasterio.open(str(str_bankpixels_path)) as ds_bankpixels:    
-        
+    with rasterio.open(str(str_bankpixels_path)) as ds_bankpixels:  # open with share=False for multithreading
+
+        # Successive buffer-mask operations to count bank pixels at certain intervals
+        lst_buff = range(int(ds_bankpixels.res[0]), max_buff, int(ds_bankpixels.res[0]))
+
+        #        ## TEST Multiprocessing
+        #        func = partial(chan_wid_bnk_pixel_worker, i_step, max_buff, lst_buff, ds_bankpixels) # Can't send an open dataset reader?
+        #        pool = mp.Pool(processes=2)
+        #        lst_out = pool.map(func, gp_coords)
+        #        pool.close()
+        #        pool.join()
+        #        for item in lst_out:
+        #            print('pause')
+        #        ## END TEST MP
+
         # Access the streamlines layer...
-        with fiona.open(str(str_streamlines_path), 'r') as streamlines: # NOTE: For some reason you have to explicitly convert the variable to a string (is it unicode?)
-      
-#            progBar.setRange(0, len(streamlines)) 
-            
+        with fiona.open(str(str_streamlines_path), 'r') as streamlines:  # WHY IS THIS BEING OPENED??
+
+            #            progBar.setRange(0, len(streamlines))
+
             # Get the crs...
-            streamlines_crs = streamlines.crs                
-            
-#                # For writing out the buffers...
-#                with fiona.open(r'D:\Terrain_and_Bathymetry\USGS\CBP_analysis\DifficultRun\raw\buff_test_ls.shp','w','ESRI Shapefile', schema_buff) as buff_out:                     
-                
+            streamlines_crs = streamlines.crs
+
             # Open another file to write the output props:
-            with fiona.open(str_outpath, 'w', 'ESRI Shapefile', schema_output, streamlines_crs) as output:
-                
+            with fiona.open(str_chanmet_segs, 'w', 'ESRI Shapefile', schema_output, streamlines_crs) as output:
+
                 for i_linkno, df_linkno in gp_coords:
-                    
-#                    progBar.setValue(j)
-                    j+=1                    
-            
+
+                    #                    progBar.setValue(j)
+                    j += 1
+
                     i_linkno = int(i_linkno)
-#                        max_indx = len(df_linkno.index) - 1
-                    
-#                    if i_linkno != 1368: continue                
-                    
+
+                    #                    if i_linkno != 1368: continue
                     print('linkno:  {}'.format(i_linkno))
-          
+                    # logger.info('linkno:  {}'.format(i_linkno))
+
                     # << Analysis by reach segments >>
                     # Set up index array to split up df_linkno into segments (these dictate the reach segment length)...
                     # NOTE:  Reach might not be long enough to break up
-                    arr_ind = np.arange(i_step, len(df_linkno.index)+1, i_step) # NOTE: Change the step for resolution?                        
-                    lst_dfsegs = np.split(df_linkno, arr_ind)                        
-                    
-                    for i_seg, df_seg in enumerate(lst_dfsegs): # looping over each reach segment
-                        
+                    arr_ind = np.arange(i_step, len(df_linkno.index) + 1,
+                                        i_step)  # NOTE: Change the step for resolution?
+                    lst_dfsegs = np.split(df_linkno, arr_ind)
+
+                    for i_seg, df_seg in enumerate(lst_dfsegs):  # looping over each reach segment
+
+                        order = df_seg.order.max()
+
+                        try:
+                            order = int(order)
+                        except:
+                            order = 1
+
                         arr_x = df_seg.x.values
                         arr_y = df_seg.y.values
 
                         try:
                             # Create a line segment from endpts in df_seg...
-                            ls = LineString(zip(arr_x, arr_y))                            
+                            ls = LineString(zip(arr_x, arr_y))
                         except:
                             print('Cannot create a LineString using these points, skipping')
-                            continue 
-                        
+                            # logger.error('Cannot create a LineString using these points, skipping')
+                            continue
+
                         try:
                             # Calculate straight line distance...
-                            dist_sl = np.sqrt((arr_x[0] - arr_x[-1])**2 + (arr_y[0] - arr_y[-1])**2)                     
+                            dist_sl = np.sqrt((arr_x[0] - arr_x[-1]) ** 2 + (arr_y[0] - arr_y[-1]) ** 2)
                         except:
                             print('Error calculated straight line distance')
+                            # logger.warning('Error calculated straight line distance')
                             dist_sl = -9999.
-                            
-                        dist = ls.length                                    
-                        sinuosity = dist/dist_sl # ratio of sinuous length to straight line length
-                        
-                        lst_tally=[]                            
 
-                        for buff_dist in lst_buff:                                                            
-                            
+                        dist = ls.length
+                        sinuosity = dist / dist_sl  # ratio of sinuous length to straight line length
+
+                        lst_tally = []
+
+                        for buff_dist in lst_buff:
+
                             try:
                                 # Watch out for potential geometry errors here...
                                 ls_offset_left = ls.parallel_offset(buff_dist, 'left')
-                                ls_offset_rt = ls.parallel_offset(buff_dist, 'right')   
+                                ls_offset_rt = ls.parallel_offset(buff_dist, 'right')
                             except:
+                                # logger.warning('Error performing offset buffer')
                                 print('Error performing offset buffer')
-                            
-                            # Buffer errors can result from complicated line geometry... 
+
+                            # Buffer errors can result from complicated line geometry...
                             try:
-                                out_left, out_transform = rasterio.mask.mask(ds_bankpixels, [mapping(ls_offset_left)], crop=True)  
+                                out_left, out_transform = rasterio.mask.mask(ds_bankpixels, [mapping(ls_offset_left)],
+                                                                             crop=True)
                             except:
                                 print('Left offset error')
-                                out_left=np.array([0])
-                                
+                                # logger.warning('Left offset error')
+                                out_left = np.array([0])
+
                             try:
-                                out_rt, out_transform = rasterio.mask.mask(ds_bankpixels, [mapping(ls_offset_rt)], crop=True)
+                                out_rt, out_transform = rasterio.mask.mask(ds_bankpixels, [mapping(ls_offset_rt)],
+                                                                           crop=True)
                             except:
                                 print('Right offset error')
-                                out_rt=np.array([0])
-                                
-                            num_pixels_left = len(out_left[out_left>0.])
-                            num_pixels_rt = len(out_rt[out_rt>0.])
-                            
-                            # You want the number of pixels gained by each interval...                    
+                                # logger.warning('Right offset error')
+                                out_rt = np.array([0])
+
+                            num_pixels_left = len(out_left[out_left > 0.])
+                            num_pixels_rt = len(out_rt[out_rt > 0.])
+
+                            # You want the number of pixels gained by each interval...
                             tpl_out = i_linkno, buff_dist, num_pixels_left, num_pixels_rt
-                            lst_tally.append(tpl_out)                    
-                            df_tally = pd.DataFrame(lst_tally, columns=['linkno','buffer','interval_left','interval_rt'])
-                        
-                        # Calculate weighted average                     
-                        # Only iterate over the top 3 or 2 (n_top) since distance is favored...    
-                        weighted_avg_left=0 
-                        weighted_avg_rt=0
-                        n_top=2   
-                        
-                        try:                        
+                            lst_tally.append(tpl_out)
+                            df_tally = pd.DataFrame(lst_tally,
+                                                    columns=['linkno', 'buffer', 'interval_left', 'interval_rt'])
+
+                        # Calculate weighted average
+                        # Only iterate over the top 3 or 2 (n_top) since distance is favored...
+                        weighted_avg_left = 0
+                        weighted_avg_rt = 0
+                        n_top = 2
+
+                        try:
                             for tpl in df_tally.nlargest(n_top, 'interval_left').iloc[0:2].itertuples():
-                                weighted_avg_left += tpl.buffer*(np.float(tpl.interval_left)/np.float(df_tally.nlargest(n_top, 'interval_left').iloc[0:2].sum().interval_left))                        
+                                weighted_avg_left += tpl.buffer * (np.float(tpl.interval_left) / np.float(
+                                    df_tally.nlargest(n_top, 'interval_left').iloc[0:2].sum().interval_left))
                         except Exception as e:
-                            weighted_avg_left=max_buff
+                            weighted_avg_left = max_buff
+                            # logger.warning('Left width set to max. Exception: {} \n'.format(e))
                             print('Left width set to max. Exception: {} \n'.format(e))
 
                         try:
                             for tpl in df_tally.nlargest(n_top, 'interval_rt').iloc[0:2].itertuples():
-                                weighted_avg_rt += tpl.buffer*(np.float(tpl.interval_rt)/np.float(df_tally.nlargest(n_top, 'interval_rt').iloc[0:2].sum().interval_rt))                                                                                                            
+                                weighted_avg_rt += tpl.buffer * (np.float(tpl.interval_rt) / np.float(
+                                    df_tally.nlargest(n_top, 'interval_rt').iloc[0:2].sum().interval_rt))
                         except Exception as e:
-                            weighted_avg_rt=max_buff
+                            weighted_avg_rt = max_buff
+                            # logger.warning('Right width set to max. Exception: {} \n'.format(e))
                             print('Right width set to max. Exception: {} \n'.format(e))
-                       
+
                         # Write to the output shapefile here...
-                        output.write({'properties':{'linkno':i_linkno,'ch_wid_total': weighted_avg_left+weighted_avg_rt,'ch_wid_1': weighted_avg_left,'ch_wid_2': weighted_avg_rt, 'dist_sl':dist_sl,'dist':dist,'sinuosity': sinuosity}, 'geometry':mapping(ls)})                        
-                                    
-#                    if j > 50: break
+                        output.write({'properties': {'linkno': i_linkno,
+                                                     'ch_wid_total': weighted_avg_left + weighted_avg_rt,
+                                                     'ch_wid_1': weighted_avg_left, 'ch_wid_2': weighted_avg_rt,
+                                                     'dist_sl': dist_sl, 'dist': dist, 'sinuosity': sinuosity,
+                                                     'order': int(order)}, 'geometry': mapping(ls)})
+
+                    #                    if j > 50: break
     return
 
 # ===============================================================================
