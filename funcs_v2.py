@@ -1404,98 +1404,151 @@ def hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_src_path, parm_ive
         gdf_test.to_file(str_chanmet_segs) #[:-4] + '_TEST_HAND_ANALYSIS.shp')
 
 def fp_metrics_chsegs(str_fim_path, str_chanmet_segs):
-       
+    '''
+    Calculate floodplain metrics from 2D cross-sections
+
+    Inputs:
+        str_fim_path: path to the flood inundation raster
+        str_chwid: name of the field in the channel segment layer containing pre-calculated
+                   channel width values
+        str_chanmet_segs: path to the segmented streamline layer containing pre-calculated channel metrics
+                          (output form channel width from bank pixel method)
+
+        NOTE: stream order a required field in str_chanmet_segs ('order')
+    '''
+
+    str_chwid = "ch_wd_tot" # total channel width. Gets subtracted from total FP width
+
     ## Open the stream network segments layer with channel metrics:
-    gdf_segs=gpd.read_file(str_chanmet_segs)    
-    
+    gdf_segs=gpd.read_file(str_chanmet_segs)
+
     lst_fpwid=[]
     lst_fprng=[]
     lst_geom=[]
-    
+    lst_min=[]
+    lst_max=[]
+    lst_std=[]
+    lst_rug=[]
+
+    ## Keep only valid geometries:
+    gdf_segs=gdf_segs[gdf_segs.geometry.is_valid]
+
     # Open the floodplain layer...
     with rasterio.open(str(str_fim_path)) as ds_fim:
-            
         ## Loop over each segment:
         for tpl in gdf_segs.itertuples():
-            
+
             try:
+#                if tpl.Index==931: # FOR TESTING
+#                    logger.info('pause')
+                print(list(my_dataframe.columns.values))
                 ## Get Xn length based on stream order:
                 p_xnlength, p_fitlength=get_xn_length_by_order(tpl.order, True)
-            
+
                 x,y=zip(*mapping(tpl.geometry)['coordinates'])
-        
-                ## Get the segment midpoint:                                                    
+
+                ## Get the segment midpoint:
                 midpt_x = x[int(len(x)/2)]
-                midpt_y = y[int(len(y)/2)]                              
-                
+                midpt_y = y[int(len(y)/2)]
+
                 # Build a 1D cross-section from the end points:
                 lst_xy = build_xns(y, x, midpt_x, midpt_y, p_xnlength)
-                
-                try:            
+
+                try:
                     # Turn the cross-section into a linestring:
                     fp_ls = LineString([Point(lst_xy[0]), Point(lst_xy[1])])
                 except:
-                    print('Error converting Xn endpts to LineString')
+                    # logger.info('Error converting Xn endpts to LineString')
                     pass
-                                                           
-#                    sys.exit()
-                
-                ## Buffer the cross section to form a 2D rectangle:        
+
+
+                ## Buffer the cross section to form a 2D rectangle:
                 buff_len=tpl.dist_sl/1.85 # about half of the line segment straight line distance
                 geom_fpls_buff = fp_ls.buffer(buff_len, cap_style=2)
-                xn_buff = mapping(geom_fpls_buff)                    
-                
-                # Mask the fp for each feature...
+                xn_buff = mapping(geom_fpls_buff)
+
+                ## Mask the fp for each feature:
                 w_fim, trans_fim = rasterio.mask.mask(ds_fim, [xn_buff], crop=True)
                 w_fim=w_fim[0]
                 w_fim=w_fim[w_fim!=ds_fim.nodata]
-                
+
+                if w_fim[w_fim>0].size==0:
+                    lst_fpwid.append(-9999.)
+                    lst_fprng.append(-9999.)
+                    lst_geom.append(-9999.)
+                    lst_min.append(-9999.)
+                    lst_max.append(-9999.)
+                    lst_std.append(-9999.)
+                    lst_rug.append(-9999.)
+                    continue
+
+                ## OR, Get indices of FIM pixels and use those for the DEM
+#                    inds_fim=np.where(w_fim!=ds_fim.nodata)
+
+                fp_fim=w_fim[w_fim>0]  # Assumes is along zero height pixels
+                fp_min=fp_fim.min()
+                fp_max=fp_fim.max()
+                fp_std=fp_fim.std()
+
                 # << Related to mapping the floodplain based on HAND height >>
                 # Count the number of pixels in the buffered Xn...
                 num_pixels = w_fim.size
-                 
+
                 # Calculate area of FP pixels...
-                area_pixels = num_pixels*(ds_fim.res[0]**2) # get grid resolution               
-                
+                area_pixels = num_pixels*(ds_fim.res[0]**2) # get grid resolution
+
                 # Calculate width by stretching it along the length of the 2D Xn...
-                fp_width = area_pixels/(buff_len*2)   
+                fp_width = area_pixels/(buff_len*2)
             #    fp_width=0 # For testing purposes
-                
-                ## TO DO:  Get other properties by analyzing values in w_fim (depth) 
+
+                ## Elevation range using HAND heights:
                 try:
                     fp_range=w_fim.max()-w_fim.min()
                 except:
                     fp_range=0
                     pass
-                    
-                # Subtract channel width from fp width...
-                fp_width = fp_width - tpl.ch_wid_tot
-                
-                if fp_width<0.: fp_width = 0                
-                
+                print(fp_width, "1st")
+                ## Subtract channel width from fp width...
+                fp_width = fp_width - getattr(tpl, str_chwid)
+                print(fp_width, "2nd")
+                ## If negative, just set it to zero:
+                if fp_width<0.: fp_width = 0
+
+                ## Try calculating roughness (Planar area vs. actual area):
+                # fp_rug=rugosity(w_fim, ds_fim.res[0], logger) # returns -9999. if error
+                fp_rug=rugosity(w_fim, ds_fim.res[0]) # returns -9999. if error
+
+                lst_min.append(fp_min)
+                lst_max.append(fp_max)
+                lst_std.append(fp_std)
                 lst_fpwid.append(fp_width)
                 lst_fprng.append(fp_range)
+                lst_rug.append(fp_rug)
                 lst_geom.append(tpl.geometry)
-#                print('hey')
+#                logger.info('hey')
             except Exception as e:
-                print(f'Error with segment {tpl.Index}; skipping')
-                lst_fpwid.append(-9999)
-                lst_fprng.append(-9999)
-                lst_geom.append(-9999)                    
+                # logger.info(f'Error with segment {tpl.Index}: {str(e)}')
+                lst_fpwid.append(-9999.)
+                lst_fprng.append(-9999.)
+                lst_geom.append(-9999.)
+                lst_min.append(-9999.)
+                lst_max.append(-9999.)
+                lst_std.append(-9999.)
+                lst_rug.append(-9999.)
+#                sys.exit() ## TEST TEST TEST
                 continue
-            
-        ## Re-save the channel metrics shapefile with FP metrics added:         
-        gdf_segs['fp_width']=lst_fpwid
-        gdf_segs['fp_range']=lst_fprng
-        gdf_segs.to_file(str_chanmet_segs)
-            
-#            gdf=gpd.GeoDataFrame()
-#            gdf['geometry']=lst_geom
-#            gdf['fp_width']=lst_fpwid
-#            gdf['fp_range']=lst_fprng            
-#            gdf.crs=gdf_segs.crs
-#            gdf['buff']=1
-#            gdf.to_file(r"E:\test_buffs.shp")
+
+    ## Re-save the channel metrics shapefile with FP metrics added:
+#    gdf_out=gpd.GeoDataFrame()
+#    gdf_out.crs=gdf_segs.crs
+#    gdf_out.geometry=gdf_segs.geometry
+    gdf_segs['fp_width_2d']=lst_fpwid
+    gdf_segs['fp_range_2d']=lst_fprng
+    gdf_segs['fp_min_2d']=lst_min
+    gdf_segs['fp_max_2d']=lst_max
+    gdf_segs['fp_std_2d']=lst_std
+    gdf_segs['fp_rug_2d']=lst_rug
+    gdf_segs.to_file(str_chanmet_segs) #[:-4]+'_TEST.shp')
 
 # ===============================================================================
 #  Delineate a FIM from the HAND grid using depth at each polygon (eg, catchment)
