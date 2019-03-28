@@ -221,15 +221,20 @@ def get_cell_size(str_grid_path):
 
     return cs_x
 
-def rugosity(arr, res):
+def rugosity(arr, res, logger):
     '''
     Actual 3D area divided by 2D planar area gives a measure
     of terrain complexity or roughness
     '''
-    area3d = ((res**2)*(1 + np.gradient(arr)**2)**0.5).sum()
-    area2d = len(arr)*res**2
+    try:
+        area3d = ((res ** 2) * (1 + np.gradient(arr) ** 2) ** 0.5).sum()  # actual surface area
+        area2d = len(arr) * res ** 2  # planar surface area
+        rug = area3d / area2d
+    except:
+        logger.info(f'Error in rugosity. arr.shape: {arr.shape}')
+        return -9999.
 
-    return area3d/area2d
+    return rug
 
 # ==========================================================================
 #   Reproject a grid layer using rasterio
