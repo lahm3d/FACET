@@ -497,9 +497,10 @@ def join_watershed_attrs(w, physio, net, output):
     wshedsMerge = wsheds.merge(pointsInPhysio, on='LINKNO') # merge 1
     wshedsMerge = wshedsMerge.merge(net, on='LINKNO') # merge 2
 
-    wshedsMerge.to_file(output)
+    wshedsMerge.to_file(str(output))
 
-def rasterize_gdf(gdf, str_ingrid_path, str_tempgrid, str_outgrid, huc_poly):
+def rasterize_gdf(str_net_path, str_ingrid_path, str_tempgrid, str_outgrid, huc_poly):
+    gdf = gpd.read_file(str(str_net_path))
     '''
     Thanks to:  https://gis.stackexchange.com/questions/151339/rasterize-a-shapefile-with-geopandas-or-fiona-python
     '''
