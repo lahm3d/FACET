@@ -17,7 +17,7 @@ from numpy import asarray
 #from scipy.stats import gaussian_kde # TEST
 #from scipy.optimize import curve_fit # TEST
 from scipy import signal
-from scipy.ndimage import percentile_filter
+from scipy.ndimage import percentile_filter, label
 
 import os
 #import ntpath
@@ -1192,21 +1192,37 @@ def reach_characteristics_hand(str_sheds_path, str_hand_path, str_slp_path):
 
     return
 
-def hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_src_path, parm_ivert):
+def hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_src_path, str_fp_path, str_dem_path, logger):
+    """
+    Calculation of floodplain metrics by analyzing HAND using 2D cross-sections and
+    differentiating between channel pixels and floodplain pixels.
+    :param str_hand_path: Path to the HAND grid .tif
+    :param str_chanmet_segs: Path to the output of the channel_width_from_bank_pixels() func
+    :param str_src_path: Path to the .tif file where stream reaches correspond to linkno values
+    :param str_fp_path: Path to the floodplain grid .tif
+    :param logger: Logger instance for messaging
+    :return: Writes out additional attributes to the file in str_chanmet_segs
+    """
     # Open the stream network segments layer with channel metrics:
-    gdf_segs = gpd.read_file(str_chanmet_segs)
+    gdf_segs = gpd.read_file(str(str_chanmet_segs))
 
     lst_linkno = []
-    #    lst_lower_slp=[]
-    #    lst_upper_slp=[]
-    #    lst_slp_ratio=[]
-    #    lst_lower_rug=[]
-    #    lst_upper_rug=[]
-    #    lst_rug_ratio=[]
+    # Channel metrics:
     lst_bnk_ht = []
     lst_chn_wid = []
     lst_chn_shp = []
-    lst_geom = []  # for testing
+    lst_geom = []  # for testing/creating a new output file
+    # FP metrics:
+    lst_fpmin = []
+    lst_fpmax = []
+    lst_fpstd = []
+    lst_fprug = []
+    lst_fpwid = []
+    lst_fprange = []
+    lst_fpmin_e = []
+    lst_fpmax_e = []
+    lst_fpstd_e = []
+    lst_fprange_e = []
 
     # Open the hand layer...
     with rasterio.open(str(str_hand_path)) as ds_hand:
