@@ -170,44 +170,46 @@ def build_xns(lstThisSegmentRows, lstThisSegmentCols, midPtCol, midPtRow, p_xnle
     return lst_xy
 
 def get_xn_length_by_order(i_order, bool_isvalley):
-    if not(bool_isvalley):
+    # Settings for channel cross-sections:
+    if not (bool_isvalley):
         if i_order == 1:
-            p_xnlength=20
+            p_xnlength = 20
             p_fitlength = 3
         elif i_order == 2:
-            p_xnlength=23
+            p_xnlength = 23
             p_fitlength = 6
         elif i_order == 3:
-            p_xnlength=40
+            p_xnlength = 40
             p_fitlength = 9
         elif i_order == 4:
-            p_xnlength=60
+            p_xnlength = 60
             p_fitlength = 12
         elif i_order == 5:
-            p_xnlength=80
+            p_xnlength = 80
             p_fitlength = 15
         elif i_order >= 6:
-            p_xnlength=250
+            p_xnlength = 150
             p_fitlength = 20
-    ## Settings for floodplain cross-sections:
+            # Settings for floodplain cross-sections:
     elif bool_isvalley:
+
         if i_order == 1:
-            p_xnlength=50
+            p_xnlength = 50
             p_fitlength = 5
         elif i_order == 2:
-            p_xnlength=75
+            p_xnlength = 75
             p_fitlength = 8
         elif i_order == 3:
-            p_xnlength=100
+            p_xnlength = 100
             p_fitlength = 12
         elif i_order == 4:
-            p_xnlength=150
+            p_xnlength = 150
             p_fitlength = 20
         elif i_order == 5:
-            p_xnlength=200
+            p_xnlength = 200
             p_fitlength = 30
         elif i_order >= 6:
-            p_xnlength=500
+            p_xnlength = 500
             p_fitlength = 40
 
     return p_xnlength, p_fitlength
