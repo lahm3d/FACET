@@ -12,7 +12,7 @@ import os
 import fnmatch
 import sys
 import pandas as pd
-import geopandas as gpd
+import logging
 import configparser
 from pathlib import Path
 
@@ -22,11 +22,27 @@ from pathlib import Path
 import funcs_v2
 import config
 
+def initialize_logger(log_file):
+    logger = logging.getLogger('logger_loader')
+    logging.basicConfig(filename=log_file)
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s [%(lineno)d] - %(message)s', '%m/%d/%Y %I:%M:%S %p')
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+def clear_out_logger(logger):
+    handlers = logger.handlers[:]
+    for handler in handlers:
+        handler.close()
+        logger.removeHandler(handler)
 
 if __name__ == '__main__':    
     
     print('\n<<< Start >>>\r\n')
-    start_time_0 = timeit.default_timer()
+    start_time_i = timeit.default_timer()
 
     # read in config file
     config_file = config.get_config_path()
@@ -60,6 +76,14 @@ if __name__ == '__main__':
     run_taudem        = Config['paths and flags']['taudem']     # Run TauDEM functions?    
     physio            = Config['paths and flags']['physio']
 
+    ## CRS:
+    dst_crs = Config['spatial ref']['crs']
+
+    ## logfile path
+    log_file = Config['logging']['log_file']
+
+    # logging
+    logger = initialize_logger(log_file)
     # print(str_reachid)
     # print(str_orderid)
     # print(parm_ivert)
