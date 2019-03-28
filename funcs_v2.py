@@ -4,6 +4,7 @@ Created on Wed Dec  7 14:51:45 2016
 
 @author: sam.lamont
 """
+from pathlib import Path
 #import pprint # neat!
 
 #import math
@@ -289,11 +290,11 @@ def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
 def reproject_vector_layer(str_path_to_file, str_target_proj4):
     print('Reprojecting vector layer...')
 
-    gdf = gpd.read_file(str_path_to_file)
+    gdf = gpd.read_file(str(str_path_to_file))
     gdf = gdf.to_crs(str_target_proj4)
 
-    str_out_path = str_path_to_file[:-4] + '_proj.shp'
-    gdf.to_file(str_out_path)
+    str_out_path = str(str_path_to_file)[:-4] + '_proj.shp'
+    gdf.to_file(str(str_out_path))
 
     return str_out_path
 
@@ -305,12 +306,12 @@ def dissolve_line_features(str_lines_path, output_filename):
 
     lst_all=[]
 
-    with fiona.open(str_lines_path) as lines:
+    with fiona.open(str(str_lines_path)) as lines:
 
         crs = lines.crs
 
         schema = {'geometry':'MultiLineString', 'properties':{'linkno':'int:6'}}
-        with fiona.open(output_filename, 'w', 'ESRI Shapefile', schema, crs) as output:
+        with fiona.open(str(output_filename), 'w', 'ESRI Shapefile', schema, crs) as output:
 
             for line in lines:
 
@@ -328,13 +329,13 @@ def points_along_line_features(str_diss_lines_path, output_filename):
 
     p_interp_spacing = 1000
 
-    with fiona.open(str_diss_lines_path) as line:
+    with fiona.open(str(str_diss_lines_path)) as line:
 
         crs = line.crs
         line = line[0]
 
         schema = {'geometry':'Point', 'properties':{'id':'int:6'}}
-        with fiona.open(output_filename, 'w', 'ESRI Shapefile', schema, crs) as output:
+        with fiona.open(str(output_filename), 'w', 'ESRI Shapefile', schema, crs) as output:
 
             line_shply = MultiLineString(line['geometry']['coordinates'])
 
@@ -414,12 +415,12 @@ def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
 
 
     # Now clip/intersect the streamlines file with results via Shapely...
-    with fiona.open(str_lines_path) as lines:
+    with fiona.open(str(str_lines_path)) as lines:
         # Get the subset that falls within bounds of polygon...
         subset = lines.filter(bbox=shape(poly['geometry']).bounds)
         lines_schema = lines.schema
         lines_crs = lines.crs
-        with fiona.open(output_filename, 'w', 'ESRI Shapefile', lines_schema, lines_crs) as dst:
+        with fiona.open(str(output_filename), 'w', 'ESRI Shapefile', lines_schema, lines_crs) as dst:
             for line in subset:
                 if shape(line['geometry']).within(poly_shp):
                     dst.write(line)
@@ -448,14 +449,14 @@ def watershed_polygonize(in_tif, out_shp):
     driver = 'Shapefile'
     crs = src.crs
     schema = {'properties': [('raster_val', 'int')], 'geometry': 'Polygon'}
-    with fiona.open(tmp, 'w', driver=driver, crs=crs, schema=schema) as dst:
+    with fiona.open(str(tmp), 'w', driver=driver, crs=crs, schema=schema) as dst:
         dst.writerecords(results)
 
     # original sauce: https://gis.stackexchange.com/questions/149959/dissolving-polygons-based-on-attributes-with-python-shapely-fiona
     # dissolve and remove nodata vals
-    with fiona.open(tmp) as input:
+    with fiona.open(str(tmp)) as input:
         meta = input.meta # copy tmp files metadata
-        with fiona.open(out_shp, 'w', **meta) as output:
+        with fiona.open(str(out_shp), 'w', **meta) as output:
             # sort and then perform groupby on raster_vals
             by_vals = sorted(input, key=lambda k: k['properties']['raster_val'])
             # group by 'raster_val'
@@ -473,7 +474,7 @@ def watershed_polygonize(in_tif, out_shp):
 # ==========================================================================
 def join_watershed_attrs(w, physio, net, output):
     # 1 - read in watershed polygons
-    wsheds = gpd.read_file(w) # watershed grid shp
+    wsheds = gpd.read_file(str(w)) # watershed grid shp
     points = wsheds.copy() #
     # 2 - polygons to centroid points
     points.geometry = points['geometry'].centroid # get centroids
@@ -561,8 +562,8 @@ def create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts
     lst_pts=[]
     lst_x=[]
     lst_y=[]
-
-    with fiona.open(str_streamlines_path) as lines:
+    
+    with fiona.open(str(str_streamlines_path)) as lines:
 
         streamlines_crs = lines.crs # to use in the output grid
 
@@ -728,26 +729,27 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         inputProc = str(2) # number of cores to use for TauDEM processes
 
         # << Define all filenames here >>
-        str_dem_path             = os.path.join(root, f'{hucID}_dem_proj.tif')
-        breach_filepath_tif_tmp  = os.path.join(root, f'{hucID}_breach_tmp_proj.tif')
-        breach_filepath_tif_proj = os.path.join(root, f'{hucID}_breach_proj.tif')
-        breach_filepath_dep      = os.path.join(root, f'{hucID}_breach.dep')
+        str_dem_path             = str(root / f'{hucID}_dem_proj.tif')
+        breach_filepath_tif_tmp  = str(root / f'{hucID}_breach_tmp_proj.tif')
+        breach_filepath_tif_proj = str(root / f'{hucID}_breach_proj.tif')
+        breach_filepath_dep      = str(root / f'{hucID}_breach.dep')
 
-        str_danglepts_path = os.path.join(root, f'{hucID}_wg.tif')
-        p                  = os.path.join(root, f'{hucID}_breach_p.tif')
-        sd8                = os.path.join(root, f'{hucID}_breach_sd8.tif')
-        ad8_wg             = os.path.join(root, f'{hucID}_breach_ad8_wg.tif')
-        ad8_no_wg          = os.path.join(root, f'{hucID}_breach_ad8_no_wg.tif')
-        ord_g              = os.path.join(root, f'{hucID}_breach_ord_g.tif')
-        tree               = os.path.join(root, f'{hucID}_breach_tree')
-        coord              = os.path.join(root, f'{hucID}_breach_coord')
-        net                = os.path.join(root, f'{hucID}_breach_net.shp')
-        w                  = os.path.join(root, f'{hucID}_breach_w.tif')
-        w_shp              = os.path.join(root, f'{hucID}_breach_w.shp')
-        slp                = os.path.join(root, f'{hucID}_breach_slp.tif')
-        ang                = os.path.join(root, f'{hucID}_breach_ang.tif')
-        dd                 = os.path.join(root, f'{hucID}_breach_hand.tif')
-        wshed_physio       = os.path.join(root, f'{hucID}_breach_w_diss_physio.shp')
+        str_danglepts_path = str(root / f'{hucID}_wg.tif')
+        p                  = str(root / f'{hucID}_breach_p.tif')
+        sd8                = str(root / f'{hucID}_breach_sd8.tif')
+        ad8_wg             = str(root / f'{hucID}_breach_ad8_wg.tif')
+        ad8_no_wg          = str(root / f'{hucID}_breach_ad8_no_wg.tif')
+        ord_g              = str(root / f'{hucID}_breach_ord_g.tif')
+        tree               = str(root / f'{hucID}_breach_tree')
+        coord              = str(root / f'{hucID}_breach_coord')
+        net                = str(root / f'{hucID}_breach_net.shp')
+        w                  = str(root / f'{hucID}_breach_w.tif')
+        w_shp              = str(root / f'{hucID}_breach_w.shp')
+        slp                = str(root / f'{hucID}_breach_slp.tif')
+        ang                = str(root / f'{hucID}_breach_ang.tif')
+        dd                 = str(root / f'{hucID}_breach_hand.tif')
+        wshed_physio       = str(root / f'{hucID}_breach_w_diss_physio.shp')
+
 
         # print ("01", str_dem_path)
         # print ("02", breach_filepath_tif_tmp)
@@ -1103,7 +1105,7 @@ def reach_characteristics_hand(str_sheds_path, str_hand_path, str_slp_path):
         with rasterio.open(str(str_slp_path)) as ds_slp:
 
             ## Open the catchment polygon layer:
-            with fiona.open(np.str(str_sheds_path), 'r') as sheds:
+            with fiona.open(str(str_sheds_path), 'r') as sheds:
 
                 ## Loop over catchments:
                 for shed in sheds:
