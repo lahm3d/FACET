@@ -9,7 +9,7 @@ Created on Tue Dec  6 16:11:00 2016
 import glob
 import timeit
 import os
-import fnmatch
+# import fnmatch
 import sys
 import pandas as pd
 import logging
@@ -135,119 +135,121 @@ if __name__ == '__main__':
     
     ## << FOR BULK PROCESSING >>
     ## Specify path to root:
-    huc04_dir = Config['paths and flags']['huc04_dir']
-    # huc10_dir = Config['paths and flags']['huc10_dir']
-    # huc12_dir = Config['paths and flags']['huc12_dir']
-
-    # if huc04_dir:
-    #     lst_paths = glob.glob(f"{huc04_dir}\\*")
-    # elif huc10_dir:
-    #     huc10_p = Path()
-    #     lst_paths = glob.glob(f"{huc04_dir}\\*")
-
-    lst_paths = glob.glob(f"{huc04_dir}\\*")
-    # lst_paths = [lst_paths]
+    data_dir = Config['paths and flags']['data_dir']
+    lst_paths = glob.glob(f"{data_dir}\\*")
     lst_paths.sort() # for testing
-    print(lst_paths)
     #===============================================================================================   
     #                           Chesapeake file structure:
     #===============================================================================================   
     for i, path in enumerate(lst_paths):
-        str_nhdhr_huc4 = glob.glob(path + '\*.shp')[0] # Z:\facet\CFN_CB_HUC10\0206\0206.shp
-        
-        ## Reproject the nhdhr lines to same as DEM:
-        dst_crs='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'      
-        # dst_crs="+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"
-        # dst_crs = "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+        path = Path(path) # convert to Windows path
+        str_nhdhr_huc4 = path / f'{path.stem}.shp' # Z:\facet\CFN_CB_HUC10\0206\0206.shp
 
+        if str_nhdhr_huc4.is_file():
+            logger.info(f'HUC4 shp does exist!: {str_nhdhr_huc4}')
+            pass
+        else:
+            logger.info(f'HUC4 shp DOES NOT exist!: {str_nhdhr_huc4}')
+            break
+        
         ## Re-project the NHD to match the DEM:
         str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
        
         for root, dirs, files in os.walk(path):
-            hucID = root.split('\\')[-1:][0] # huc10 or huc12
-            try:
-                # str_huc = fnmatch.filter(files, '*.shp')[0]
-                str_dem = fnmatch.filter(files, f'{hucID}_dem.tif')[0]
-            except:
-                continue
+            for huc_dir in dirs:
+                hucID   = huc_dir # HUC 10 or 12 ID
+                root    = Path(root) # HUC4 directory
+                huc_dir = root / hucID 
+                             
+                print (huc_dir, hucID)
+    
+                str_dem = huc_dir / f'{hucID}_dem.tif'
+                if str_dem.is_file():
+                    logger.info(f'raw DEM exists: {str_dem}')
+                else:
+                    logger.warning(f'raw DEM DOES NOT exists: {str_dem}')
+                
+                # construct file paths
+                str_dem_path    = str_dem
+                str_nhdhr_huc10 = huc_dir / f'{hucID}_dem_nhdhires.shp'   
+                str_dem_proj    = huc_dir / f'{hucID}_dem_proj.tif'
 
-           # directory structure
-            str_dem_path = os.path.join(root, str_dem) # C:\...\0206000603_dem.tif
-            str_nhdhr_huc10 = os.path.join(root, f'{hucID}_dem_nhdhires.shp')            
+                # Project dem raster
+                str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, dst_crs, str_dem_proj, resolution=(3.0, 3.0))
 
-            # Project dem raster
-            dst_file = os.path.join(root, f"{hucID}_dem_proj.tif")
-            str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, dst_crs, dst_file, resolution=(3.0, 3.0))
+                ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
+                funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj) 
 
-            ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
-            funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj) 
+                ## Call preprocessing function:
+                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID)
+                
+                #### start of post-processing steps(???)
+                str_dem_path          = huc_dir  / f'{hucID}_dem_proj.tif'
+                str_breached_dem_path = huc_dir  / f'{hucID}_breach_proj.tif'
+                str_hand_path         = huc_dir  / f'{hucID}_breach_hand.tif'
+                str_net_path          = huc_dir  / f'{hucID}_breach_net.shp'
+                str_raster_net_path   = huc_dir  / f'{hucID}_breach_net.tif'    
+                str_sheds_path        = huc_dir  / f'{hucID}_breach_w_diss_physio.shp'
+                # output paths
+                str_csv_path          = huc_dir / f'{hucID}.csv'
+                str_chxns_path        = huc_dir / f'{hucID}_breach_chxns.shp'       
+                str_bankpts_path      = huc_dir / f'{hucID}_breach_bankpts.shp'
+                str_chanmet_segs      = huc_dir / f'{hucID}_breach_net_ch_width.shp'
+                str_bankpixels_path   = huc_dir / f'{hucID}_breach_bankpixels.tif'        
+                str_fpxns_path        = huc_dir / f'{hucID}_breach_fpxns.shp'
+                str_fim_path          = huc_dir / f'{hucID}_breach_hand_3sqkm_fim.tif'        
+                str_fim_csv           = huc_dir / f'{hucID}_breach_hand_3sqkm_fim_h.csv'        
+                str_comp_path         = huc_dir / f'{hucID}_breach_comp.tif'
+                
+                # Convert vector streamlines to raster with pixel streamline values matching linkno:
+                funcs_v2.rasterize_gdf(str_net_path, str_hand_path, str_raster_net_path, None, None)
 
-            ## Call preprocessing function:
-            funcs_v2.preprocess_dem(root, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID)
-            
-            #### start of post-processing steps(???)
-            # root is Z:\facet\CFN_CB_HUC10\0206\0206000603\
-            str_dem_path          = os.path.join(root,f'{hucID}_dem_proj.tif')
-            str_breached_dem_path = os.path.join(root,f'{hucID}_breach_proj.tif')
-            str_hand_path         = os.path.join(root,f'{hucID}_breach_hand.tif')
-            str_net_path          = os.path.join(root,f'{hucID}_breach_net.shp')
-            str_raster_net_path   = os.path.join(root,f'{hucID}_breach_net.tif')    
-            str_sheds_path        = os.path.join(root,f'{hucID}_breach_w_diss_physio.shp')
+                # << GET CELL SIZE >>
+                cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
 
-            # output paths
-            str_csv_path        = os.path.join(root, f'{hucID}.csv')
-            str_chxns_path      = os.path.join(root, f'{hucID}_breach_chxns.shp')       
-            str_bankpts_path    = os.path.join(root, f'{hucID}_breach_bankpts.shp')
-            str_chanmet_segs    = os.path.join(root, f'{hucID}_breach_net_ch_width.shp')
-            str_bankpixels_path = os.path.join(root, f'{hucID}_breach_bankpixels.tif')        
-            str_fpxns_path      = os.path.join(root, f'{hucID}_breach_fpxns.shp')
-            str_fim_path        = os.path.join(root, f'{hucID}_breach_hand_3sqkm_fim.tif')        
-            str_comp_path       = os.path.join(root, f'{hucID}_breach_comp.tif')
-            
-            # Convert vector streamlines to raster with pixel streamline values matching linkno:
-            gdf = gpd.read_file(str_net_path)
-            funcs_v2.rasterize_gdf(gdf, str_hand_path, str_raster_net_path, None, None)
+                # << BUILD STREAMLINES COORDINATES >>
+                logger.info('Generating the stream network coordinates from the csv file...')
+                df_coords, streamlines_crs = funcs_v2.get_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid, logger) # YES!
+                df_coords.to_csv(str_csv_path)
+                logger.info('Reading the stream network coordinates from the csv file...')
+                df_coords = pd.read_csv(str_csv_path,)
 
-            # << GET CELL SIZE >>
-            cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
-            df_coords, streamlines_crs = funcs_v2.get_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid) # YES!
-            df_coords.to_csv(str_csv_path)
-            df_coords = pd.read_csv(str_csv_path,)
+                # ============================= << CROSS SECTION ANALYSES >> =====================================
+                # << CREATE Xn SHAPEFILES >>
+                # Channel:
+                funcs_v2.write_xns_shp(df_coords, streamlines_crs, str_chxns_path, False, int(3), logger)             
+                # Floodplain:
+                funcs_v2.write_xns_shp(df_coords, streamlines_crs, str_fpxns_path, True, int(30), logger)     
 
-            # print(df_coords.head(6))
+                # << INTERPOLATE ELEVATION ALONG Xns >>
+                df_xn_elev = funcs_v2.read_xns_shp_and_get_dem_window(str_chxns_path, str_dem_path, logger)
 
-            # ============================= << CROSS SECTION ANALYSES >> =====================================
-            # << CREATE Xn SHAPEFILES >>
-            ## Channel:
-            funcs_v2.write_xns_shp(df_coords, streamlines_crs, str_chxns_path, False, int(3))             
-            # Floodplain:
-            funcs_v2.write_xns_shp(df_coords, streamlines_crs, str_fpxns_path, True, int(30))     
+                # Calculate channel metrics and write bank point shapefile...# NOTE:  Use raw DEM here??        
+                funcs_v2.chanmetrics_bankpts(df_xn_elev, str_chxns_path, str_dem_path, 
+                                                str_bankpts_path, parm_ivert, XnPtDist, 
+                                                parm_ratiothresh, parm_slpthresh, logger)
 
-            # << INTERPOLATE ELEVATION ALONG Xns >>
-            df_xn_elev = funcs_v2.read_xns_shp_and_get_dem_window(str_chxns_path, str_dem_path)
+                # ========================== << BANK PIXELS AND WIDTH FROM CURVATURE >> ====================================
+                funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, 
+                                                            cell_size, use_wavelet_curvature_method, logger) # YES!        
+                funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, 
+                                                            str_reachid, i_step, max_buff, 
+                                                            str_chanmet_segs, logger)        
 
-            # df_xn_elev.to_csv(r'Z:\facet\CFN_CB_HUC10\0206\0206000603\df_xn_elev.csv')
+                # ============================= << DELINEATE FIM >> =====================================
+                funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path, str_reachid, 
+                                            str_fim_path, str_fim_csv, logger)
 
-            # Calculate channel metrics and write bank point shapefile...# NOTE:  Use raw DEM here??        
-            funcs_v2.chanmetrics_bankpts(df_xn_elev, str_chxns_path, str_dem_path, str_bankpts_path, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh)
+                # ==================== << HAND CHARACTERISTICS >> ===========
+                funcs_v2.hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_raster_net_path, str_fim_path, str_dem_path, logger)
 
-            # ========================== << BANK PIXELS AND WIDTH FROM CURVATURE >> ====================================
-            funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, cell_size, use_wavelet_curvature_method) # YES!        
-            funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, i_step, max_buff, str_chanmet_segs)        
+                # ============================ << FLOODPLAIN METRICS >> =====================================
+                # 1D approach:
+                funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path, logger)
+                # 2D approach:
+                funcs_v2.fp_metrics_chsegs(str_fim_path, 'ch_wid_tot', str_chanmet_segs, logger)
+        
 
-            # ============================= << DELINEATE FIM >> =====================================
-            funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path, str_reachid)
-
-            # ============================ << FLOODPLAIN METRICS >> =====================================
-            funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path)
-            funcs_v2.fp_metrics_chsegs(str_fim_path, str_chanmet_segs)
-
-            # ==================== << HAND CHARACTERISTICS >> ===========
-            # funcs_v2.hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_raster_net_path, parm_ivert)
-
-            break
-        break
-           
     #===============================================================================================           
     ## DRB file structure:
     #===============================================================================================   
@@ -484,6 +486,6 @@ if __name__ == '__main__':
 ##    funcs_v2.channel_and_fp_width_bankpixels_segments_po_2Dfpxns(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, p_buffxnlen, str_hand_path, parm_ivert)    
 ##    funcs_v2.channel_and_fp_2Dxn_analysis(df_coords, str_net_path, str_bankpixels_path, str_hand_path, str_fim_path, str_reachid, cell_size, i_step, max_buff, p_fpxnlen)
 
-    print('\n<<< End >>>\r\n')
-    print('Total Run Time:  {}'.format(timeit.default_timer() - start_time_0))
+    # print('\n<<< End >>>\r\n')
+    # print('Total Run Time:  {}'.format(timeit.default_timer() - start_time_0))
     
