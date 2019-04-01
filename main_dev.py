@@ -24,7 +24,7 @@ import config
 
 def initialize_logger(log_file):
     logger = logging.getLogger('logger_loader')
-    logging.basicConfig(filename=log_file)
+    logging.basicConfig(filename=log_file, filemode='w')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s %(levelname)s [%(lineno)d] - %(message)s', '%m/%d/%Y %I:%M:%S %p')
     handler = logging.StreamHandler()
