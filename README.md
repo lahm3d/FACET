@@ -23,11 +23,20 @@ Identifying Floodplain Extent using Height Above Nearest Drainage (HAND)
 
 # Setting up FACET (***Work in progress***)
 
+## How-to:
+ 1. Download all the applications and files listed under **Requirements**
+ 2. Follow installation guides
+ 3. Follow FACET, Anaconda and Whitebox set-up instructions
+ 4. Edit config file, and run FACET
+
 ## Requirements:
  
  * Anaconda (Python 3.6)
  * WhiteboxTools (*not Whitebox GAT*)
- * TauDEM  (*including its dependencies*)
+ * TauDEM  (*including dependencies*)
+ * Additional file(s):
+   * [Physiographic Features](https://drive.google.com/file/d/1EaChUXv6u5GPxF0a4WX-Sg1oJHi5YmPW/view?usp=sharing) (*required*)
+   * [Sample data](https://drive.google.com/open?id=1SOdRf8zumgHHAVa3yRz6GQoHL4r4OZ7F) (*optional*)
 
 ## 1. Installation guide:
  * [Download and install Anaconda](https://docs.anaconda.com/anaconda/install/). It is recommended that you follow the instructions in the guide. Alternatively, you can also install Miniconda to save space
@@ -108,7 +117,7 @@ This means you've successfully activated FACET environment and this is where you
 
 ### Configuration file
 
-Under FACET folder you should see `config.ini` file and it can be opened in any text editor. At present, we recommend modifying the configurations under `[paths and flags]` and leaving other values as defaults. In future, additional documentation and usage on other parameters and variables will be provided. 
+Under FACET folder you should see `config.ini` file and it can be opened in any text editor. At present, we recommend modifying the configurations under `[paths and flags]` and `[logging]`, and leaving other values as defaults. In future, additional documentation and usage on other parameters and variables will be provided. 
 
 `.INI` syntax instructions are provided in the file as well. Lastly, carefully review the file before executing FACET code.
 
@@ -120,6 +129,9 @@ Under FACET folder you should see `config.ini` file and it can be opened in any 
         # values can be assigned using = or :                             #
         # for paths use / -- do not use \ or \\                           #
         #*****************************************************************#
+
+        [logging]
+        log_file: D:/git_projects/sample_data/sample_data.log
 
         [reach and order]
         reach_id : LINKNO
@@ -148,16 +160,34 @@ Under FACET folder you should see `config.ini` file and it can be opened in any 
         whitebox    : True
         wt_grid     : True
         taudem      : True
-        huc04_dir   : D:/git_projects/sample_data
+        data_dir    : D:/git_projects/sample_data
+        physio      : G:/ImageryServer/FACET/Physio_prj.shp
+
+        [spatial ref]
+        crs : +proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs
+
+
+Next step is to manually update `config.ini` and run FACET. 
+
+* `log_file`: directory and file name for log file. For each run log files are overwritten, so manually save them if needed
+* `mpi_path` and `taudem_path`:  users will need to manually find and confirm that `mpiexec.exe` (file) and `TauDEM5Exe` (folder) exist. They are usually located under following folders:
+  * `C:/Program Files/Microsoft_MPI/...`
+  * `C:/Program Files/TauDEM/...`
+* `wbt_path`: path to the directory where you've downloaded and extracted Whitebox Tools
+* `data_dir`:  path to the data. The structure should follow what's listed below (see **FACET File Structure**)
+* `physio`: [download the physiographic regions shapefile](##Requirements), unzip and link the path here for the physiographic shapefile  
+
 
 ### FACET File Structure
 
-Below is sample directory structure for FACET data. Additionally, users can download [sample data](https://drive.google.com/file/d/1lS-6UgkDmnrGUD849ySZ8h9MDiNZeFoJ/view?usp=sharing) test the FACET tool
+Last step is organize FACET data correctly. Below is sample directory structure for FACET data. Additionally, users can download [sample data](##Requirements) to test the tool
 
         c:\
         └── chesapeake_bay
-            ├── FACET
-            ├── sample_data
+            ├── physio (physiographic region SHP)
+            |      └── physio_prj.shp
+            ├── FACET (code repository)
+            ├── sample_data 
             |      └── 0206
             |           ├── 0206.shp
             |           └── 0206000403
