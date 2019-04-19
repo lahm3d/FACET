@@ -168,6 +168,7 @@ if __name__ == '__main__':
                     logger.info(f'raw DEM exists: {str_dem}')
                 else:
                     logger.warning(f'raw DEM DOES NOT exists: {str_dem}')
+                    continue
                 
                 # construct file paths
                 str_dem_path    = str_dem
