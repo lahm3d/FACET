@@ -287,16 +287,20 @@ def reproject_grid_layer(str_source_grid, dst_crs, dst_file, resolution):
 # ==========================================================================
 #   Reproject a vector layer using geopandas
 # ==========================================================================
-def reproject_vector_layer(str_path_to_file, str_target_proj4):
+def reproject_vector_layer(path, str_path_to_file, str_target_proj4):
     print('Reprojecting vector layer...')
 
-    gdf = gpd.read_file(str(str_path_to_file))
-    gdf = gdf.to_crs(str_target_proj4)
+    proj_shp = path / f'{path.stem}_proj.shp'
 
-    str_out_path = str(str_path_to_file)[:-4] + '_proj.shp'
-    gdf.to_file(str(str_out_path))
+    if proj_shp.is_file():
+        return str(proj_shp)
+    else:
+        gdf = gpd.read_file(str(str_path_to_file))
+        gdf = gdf.to_crs(str_target_proj4)
 
-    return str_out_path
+        gdf.to_file(str(proj_shp))
+
+        return str(proj_shp)
 
 # ==========================================================================
 #   For dissolving line features

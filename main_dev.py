@@ -153,8 +153,7 @@ if __name__ == '__main__':
             break
         
         ## Re-project the NHD to match the DEM:
-        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(str_nhdhr_huc4, dst_crs)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
-       
+        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(path, str_nhdhr_huc4, dst_crs)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
         for root, dirs, files in os.walk(path):
             for huc_dir in dirs:
                 hucID   = huc_dir # HUC 10 or 12 ID
