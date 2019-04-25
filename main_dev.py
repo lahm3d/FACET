@@ -79,11 +79,16 @@ if __name__ == '__main__':
     ## CRS:
     dst_crs = Config['spatial ref']['crs']
 
+    # list of Hucs to exclude from FACET runs
+    skip_list = Config['exclude HUCs']['skip_list'].split(',')
+    skip_str  = ','.join(skip_list)
+
     ## logfile path
     log_file = Config['logging']['log_file']
 
     # logging
     logger = initialize_logger(log_file)
+    # logger.info(f'Following HUCs will be skipped based on exclusion list: {skip_str}')
     # print(str_reachid)
     # print(str_orderid)
     # print(parm_ivert)
@@ -167,6 +172,9 @@ if __name__ == '__main__':
                     logger.info(f'raw DEM exists: {str_dem}')
                 else:
                     logger.warning(f'raw DEM DOES NOT exists: {str_dem}')
+                    continue
+                
+                if hucID in skip_list:
                     continue
                 
                 # construct file paths
