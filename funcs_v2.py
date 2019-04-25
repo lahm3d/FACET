@@ -875,7 +875,7 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
             output_WBT = f"-o={breach_filepath_tif_tmp}"
 
             exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT] + ["-v"]
-            print (exec_WBT)
+            # print (exec_WBT)
             try:
                 subprocess.check_call(exec_WBT)
             except subprocess.CalledProcessError:
@@ -945,33 +945,35 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
 
         if run_taudem:
 
-             # Testing...
-#            mpipath = 'r' +  '"' + mpipath + '"'
-#            fel = 'r' +  '"' + fel + '"'
+            # Testing...
+            # mpipath = 'r' +  '"' + mpipath + '"'
+            # fel = 'r' +  '"' + fel + '"'
 
-#            print('mpipath: ' + mpipath)
-#            print('fel: ' + fel_breach)
-#            print(' ')
+            # print('mpipath: ' + mpipath)
+            # print('fel: ' + fel_breach)
+            # print(' ')
 
-#            # ==============  << 1. Pit Filling with TauDEM >> ================
-#            cmd = 'mpiexec' + ' -n ' + inputProc + ' PitRemove -z ' + '"' + str_dem_path_tif + '"' + ' -fel ' + '"' + fel_pitremove + '"'
-#
-#            # Submit command to operating system
-#            print('Running TauDEM PitRemove...')
-#            os.system(cmd)
-#
-#            # Capture the contents of shell command and print it to the arcgis dialog box
-#            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-#
-#            # Get some feedback from the process to print out...
-#            message = "\n"
-#            for line in process.stdout.readlines():
-#                line = line.decode()
-#                if isinstance(line, bytes):	   # true in Python 3
-#                    line = line.decode()
-#                message = message + line
-#            print(message)
+            # ==============  << 1. Pit Filling with TauDEM >> ================
+            # cmd = 'mpiexec' + ' -n ' + inputProc + ' PitRemove -z ' + '"' + str_dem_path_tif + '"' + ' -fel ' + '"' + fel_pitremove + '"'
+            # """            
+            # cmd = f'mpiexec -n {inputProc} PitRemove -z "{str_dem_path_tif}" -fel "{fel_pitremove}"'
 
+            # # Submit command to operating system
+            # print('Running TauDEM PitRemove...')
+            # os.system(cmd)
+
+            # # Capture the contents of shell command and print it to the arcgis dialog box
+            # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+
+            # # Get some feedback from the process to print out...
+            # message = "\n"
+            # for line in process.stdout.readlines():
+            #     line = line.decode()
+            #     if isinstance(line, bytes):	   # true in Python 3
+            #         line = line.decode()
+            #     message = message + line
+            # print(message)
+            # """
             # ==============  << 2. D8 FDR with TauDEM >> ================       YES
 #            cmd = '"' + mpipath + '"' + ' -n ' + inputProc + ' ' + d8flowdir + ' -fel ' + '"' + str_dem_path + '"' + ' -p ' + '"' + p + '"' + \
 #                  ' -sd8 ' + '"' + sd8 + '"'
