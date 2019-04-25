@@ -383,6 +383,17 @@ def taudem_gagewatershed(str_pts_path, str_d8fdr_path):
 
     return
 
+def check_if_streams_are_clipping(nhd_streams):
+    if nhd_streams.is_file():
+        gdf = gpd.read_file(str(nhd_streams))
+        row, col = gdf.shape
+        if (row <= 1) | (col != 19):
+            print (f'{nhd_streams} has only 1 or 0 rows & irregular col number: {col}')
+        else:
+            print(f'rows: {row}, cols: {col}')
+    else:
+        return
+
 # ==========================================================================
 #   For clipping features
 # ==========================================================================
