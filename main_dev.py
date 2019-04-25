@@ -77,7 +77,7 @@ if __name__ == '__main__':
     physio            = Config['paths and flags']['physio']
 
     ## CRS:
-    dst_crs = Config['spatial ref']['crs']
+    spatial_ref = Config['spatial ref']['crs']
 
     # list of Hucs to exclude from FACET runs
     skip_list = Config['exclude HUCs']['skip_list'].split(',')
@@ -158,7 +158,7 @@ if __name__ == '__main__':
             break
         
         ## Re-project the NHD to match the DEM:
-        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(path, str_nhdhr_huc4, dst_crs)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
+        str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(path, str_nhdhr_huc4, spatial_ref)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
         for root, dirs, files in os.walk(path):
             for huc_dir in dirs:
                 hucID   = huc_dir # HUC 10 or 12 ID
@@ -178,19 +178,18 @@ if __name__ == '__main__':
                     continue
                 
                 # construct file paths
-                str_dem_path    = str_dem
-                str_nhdhr_huc10 = huc_dir / f'{hucID}_dem_nhdhires.shp'   
-                str_dem_proj    = huc_dir / f'{hucID}_dem_proj.tif'
+                str_dem_path        = str_dem
+                str_nhdhr_huc10     = huc_dir / f'{hucID}_dem_nhdhires.shp'   
+                str_dem_proj        = huc_dir / f'{hucID}_dem_proj.tif'
 
                 # Project dem raster
-                str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, dst_crs, str_dem_proj, resolution=(3.0, 3.0))
-
+                str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, spatial_ref, str_dem_proj, resolution=(3.0, 3.0))
                 ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
-                funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj) 
+                funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj, spatial_ref, str_whitebox_path, logger)
 
                 ## Call preprocessing function:
-                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID)
-                
+                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID)
+
                 #### start of post-processing steps(???)
                 str_dem_path          = huc_dir  / f'{hucID}_dem_proj.tif'
                 str_breached_dem_path = huc_dir  / f'{hucID}_breach_proj.tif'
@@ -256,7 +255,6 @@ if __name__ == '__main__':
                 funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path, logger)
                 # 2D approach:
                 funcs_v2.fp_metrics_chsegs(str_fim_path, 'ch_wid_tot', str_chanmet_segs, logger)
-        
 
     #===============================================================================================           
     ## DRB file structure:

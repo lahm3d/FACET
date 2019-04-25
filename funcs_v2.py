@@ -386,51 +386,113 @@ def taudem_gagewatershed(str_pts_path, str_d8fdr_path):
 # ==========================================================================
 #   For clipping features
 # ==========================================================================
-def clip_features_using_grid(str_lines_path, output_filename, str_dem_path):
-    print('Clipping streamlines to site DEM...')
 
-    tmp = os.path.dirname(str_dem_path) + "/mask.tif" # tmp DEM mask
+def clip_features_using_grid(str_lines_path, output_filename, str_dem_path, in_crs, str_whitebox_path, logger):
+    logger.info('Clipping streamlines to site DEM...')
+    #    # Build the output file name...
+    #    path_to_dem, dem_filename = os.path.split(str_dem_path)
+    #    output_filename = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp'
 
-    # convert DEM to binary raster
+    # Polygonize the raster DEM with rasterio...    
     with rasterio.open(str(str_dem_path)) as ds_dem:
         arr_dem = ds_dem.read(1)
-        profile = dict(ds_dem.profile)
 
-    #update profile
-    profile['dtype'] ='uint8'
-    profile['nodata'] = 0
-    arr_dem = (arr_dem != ds_dem.nodata).astype(np.uint8) # all nodata values = 1
+    arr_dem[arr_dem > 0] = 100
+    mask = arr_dem == 100
 
-    # write out binary raster
-    with rasterio.open(tmp, 'w', **profile) as dst:
-        dst.write(arr_dem, 1)
-
-    # Polygonize binary raster
-    mask = None
-    with rasterio.open(tmp) as src:
-        image = src.read(1)
-        results = (
+    results = (
         {'properties': {'raster_val': v}, 'geometry': s}
-        for i, (s, v) in enumerate(
-            shapes(image, mask=mask, transform=src.transform)))
+        for i, (s, v)
+        in enumerate(
+        shapes(arr_dem, mask=mask, transform=ds_dem.transform)))
+    
+    poly = list(results)
+    poly_df = gpd.GeoDataFrame.from_features(poly)
+    poly_df.crs = in_crs
+    # poly_df = poly_df[poly_df.raster_val == 100.0]
+    tmp_shp = os.path.dirname(str_dem_path) + "/mask.shp" # tmp huc mask
+    poly_df.to_file(tmp_shp)
 
+    # whitebox clip
+    path_WBT    = f"{str_whitebox_path}\\whitebox_tools.exe"
+    tool_WBT    = "-r=Clip"
+    input_WBT   = f"-i={str_lines_path}"
+    clip_WBT    = f"--clip={tmp_shp}"
+    output_WBT  = f"-o={output_filename}"
+
+    exec_WBT = [path_WBT, tool_WBT, input_WBT, clip_WBT, output_WBT] + ["-v"]
+    # print (exec_WBT)
+    try:
+        subprocess.check_call(exec_WBT)
+    except subprocess.CalledProcessError:
+        sys.exit(0)
+    '''
     poly = next(results)
     poly_shp = shape(poly['geometry'])
 
-
+    
     # Now clip/intersect the streamlines file with results via Shapely...
     with fiona.open(str(str_lines_path)) as lines:
-        # Get the subset that falls within bounds of polygon...
+
+        # Get the subset that falls within bounds of polygon...        
         subset = lines.filter(bbox=shape(poly['geometry']).bounds)
         lines_schema = lines.schema
         lines_crs = lines.crs
+
         with fiona.open(str(output_filename), 'w', 'ESRI Shapefile', lines_schema, lines_crs) as dst:
+
             for line in subset:
                 if shape(line['geometry']).within(poly_shp):
                     dst.write(line)
+    '''
 
-    os.remove(tmp)
-    return output_filename
+# def clip_features_using_grid(str_lines_path, output_filename, str_dem_path, logger):
+#     """ LA method -- do not use"""
+#     print('Clipping streamlines to site DEM...')
+
+#     tmp = os.path.dirname(str_dem_path) + "/mask.tif" # tmp DEM mask
+
+#     # convert DEM to binary raster
+#     with rasterio.open(str(str_dem_path)) as ds_dem:
+#         arr_dem = ds_dem.read(1)
+#         profile = dict(ds_dem.profile)
+
+#     #update profile
+#     profile['dtype'] ='uint8'
+#     profile['nodata'] = 0
+#     arr_dem = (arr_dem != ds_dem.nodata).astype(np.uint8) # all nodata values = 1
+
+#     # write out binary raster
+#     with rasterio.open(tmp, 'w', **profile) as dst:
+#         dst.write(arr_dem, 1)
+
+#     # Polygonize binary raster
+#     mask = None
+#     with rasterio.open(tmp) as src:
+#         image = src.read(1)
+#         results = (
+#         {'properties': {'raster_val': v}, 'geometry': s}
+#         for i, (s, v) in enumerate(
+#             shapes(image, mask=mask, transform=src.transform)))
+
+#     poly = next(results)
+#     poly_shp = shape(poly['geometry'])
+
+#     # Now clip/intersect the streamlines file with results via Shapely...
+#     with fiona.open(str(str_lines_path)) as lines:
+#         # Get the subset that falls within bounds of polygon...
+#         subset = lines.filter(bbox=shape(poly['geometry']).bounds)
+#         lines_schema = lines.schema
+#         lines_crs = lines.crs
+#         print(lines_schema, "line schema")
+#         print(lines_crs)
+#         with fiona.open(str(output_filename), 'w', 'ESRI Shapefile', schema=lines_schema, crs=lines_crs) as dst:
+#             for line in subset:
+#                 if shape(line['geometry']).within(poly_shp):
+#                     dst.write(line)
+
+#     # os.remove(tmp)
+#     return output_filename
 
 # ==========================================================================
 #   Polygonize watersheds
