@@ -801,7 +801,7 @@ def run_rust_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback = de
 #   1. Breaching and filling
 #   2. TauDEM functions
 # ===============================================================================
-def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID):
+def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID, pit_fill):
     try:
         inputProc = str(2) # number of cores to use for TauDEM processes
 
@@ -869,12 +869,13 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         # =================== << Whitebox Functions >> =====================
         if run_whitebox:
 
-            path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
-            tool_WBT = "-r=BreachDepressions"
-            input_WBT = f"-i={str_dem_path}"
-            output_WBT = f"-o={breach_filepath_tif_tmp}"
+            path_WBT        = f"{str_whitebox_path}\\whitebox_tools.exe"
+            tool_WBT        = "-r=BreachDepressions"
+            input_WBT       = f"-i={str_dem_path}"
+            output_WBT      = f"-o={breach_filepath_tif_tmp}"
+            fill_pits_var   = "--fill_pits={pit_fill}"
 
-            exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT] + ["-v"]
+            exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT, fill_pits_var] + ["-v"]
             # print (exec_WBT)
             try:
                 subprocess.check_call(exec_WBT)

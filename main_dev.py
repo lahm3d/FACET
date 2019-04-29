@@ -75,7 +75,12 @@ if __name__ == '__main__':
     run_wg            = Config['paths and flags']['wt_grid']    # Run create weight grid by finding start points from a given streamlines layer?
     run_taudem        = Config['paths and flags']['taudem']     # Run TauDEM functions?    
     physio            = Config['paths and flags']['physio']
+    pit_fill          = bool(Config['paths and flags']['fill pits'])
 
+    # print(bool(pit_fill), type(pit_fill))
+
+
+    # sys.exit(0)
     ## CRS:
     spatial_ref = Config['spatial ref']['crs']
 
@@ -188,7 +193,7 @@ if __name__ == '__main__':
                 funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj, spatial_ref, str_whitebox_path, logger)
 
                 ## Call preprocessing function:
-                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID)
+                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID, pit_fill)
 
                 #### start of post-processing steps(???)
                 str_dem_path          = huc_dir  / f'{hucID}_dem_proj.tif'
@@ -255,7 +260,6 @@ if __name__ == '__main__':
                 funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path, logger)
                 # 2D approach:
                 funcs_v2.fp_metrics_chsegs(str_fim_path, 'ch_wid_tot', str_chanmet_segs, logger)
-
     #===============================================================================================           
     ## DRB file structure:
     #===============================================================================================   
