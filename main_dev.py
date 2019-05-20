@@ -7,7 +7,7 @@ Created on Tue Dec  6 16:11:00 2016
 
 #import time
 import glob
-import timeit
+import time
 import os
 # import fnmatch
 import sys
@@ -42,8 +42,7 @@ def clear_out_logger(logger):
 if __name__ == '__main__':    
     
     print('\n<<< Start >>>\r\n')
-    start_time_i = timeit.default_timer()
-
+    
     # read in config file
     config_file = config.get_config_path()
     Config = configparser.ConfigParser()
@@ -68,6 +67,7 @@ if __name__ == '__main__':
     max_buff = int(Config['width from curvature via buff. method']['max_buff']) # maximum buffer length for measuring width based on pixels  
 
     ## Preprocessing paths and Flags specifying what to run:
+    inputProc         = Config['paths and flags']['taudem cores'] # str(2) # number of cores to use for TauDEM processes
     str_mpi_path      = Config['paths and flags']['mpi_path']
     str_taudem_dir    = Config['paths and flags']['taudem_path']
     str_whitebox_path = Config['paths and flags']['wbt_path']   
@@ -75,10 +75,23 @@ if __name__ == '__main__':
     run_wg            = Config['paths and flags']['wt_grid']    # Run create weight grid by finding start points from a given streamlines layer?
     run_taudem        = Config['paths and flags']['taudem']     # Run TauDEM functions?    
     physio            = Config['paths and flags']['physio']
-    pit_fill          = bool(Config['paths and flags']['fill pits'])
+    census_roads      = Config['paths and flags']['census roads']
+    gs_path           = Config['paths and flags']['go-spatial']
+    
+    # define breach method
+    rd_strm_breach_wbt  = funcs_v2.str2bool(Config['breach options']['rd strm + wbt breach mtd'])
+    rd_strm_breach_gs   = funcs_v2.str2bool(Config['breach options']['rd strm + go-spatial mtd'])
+    breach_gs           = funcs_v2.str2bool(Config['breach options']['go-spatial mtd'])
+    breach_wbt          = funcs_v2.str2bool(Config['breach options']['default wbt breach mtd'])
 
-    # print(bool(pit_fill), type(pit_fill))
-
+    # test to see at least one breach method is defined
+    mtd_sums = [rd_strm_breach_wbt, rd_strm_breach_gs, breach_wbt]
+    mtd_sum = sum(map(int, mtd_sums))
+    if mtd_sum is 1:
+        pass
+    else:
+        print ('None or multiple breach methods defined! Please review config file and try again')
+        sys.exit(0)
 
     # sys.exit(0)
     ## CRS:
@@ -162,10 +175,13 @@ if __name__ == '__main__':
             logger.info(f'HUC4 shp DOES NOT exist!: {str_nhdhr_huc4}')
             break
         
-        ## Re-project the NHD to match the DEM:
+        # Re-project the NHD to match the DEM:
         str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(path, str_nhdhr_huc4, spatial_ref)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
+
         for root, dirs, files in os.walk(path):
             for huc_dir in dirs:
+                start_time_i = time.clock()
+
                 hucID   = huc_dir # HUC 10 or 12 ID
                 root    = Path(root) # HUC4 directory
                 huc_dir = root / hucID 
@@ -183,21 +199,41 @@ if __name__ == '__main__':
                     continue
                 
                 # construct file paths
-                str_dem_path        = str_dem
-                str_nhdhr_huc10     = huc_dir / f'{hucID}_dem_nhdhires.shp'   
-                str_dem_proj        = huc_dir / f'{hucID}_dem_proj.tif'
-
+                str_dem_path            = str_dem
+                str_nhdhr_huc10         = huc_dir / f'{hucID}_dem_nhdhires.shp'   
+                str_dem_proj            = huc_dir / f'{hucID}_dem_proj.tif'
+                str_breached_dem_path   = huc_dir  / f'{hucID}_breach.tif'
+                
                 # Project dem raster
                 str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, spatial_ref, str_dem_proj, resolution=(3.0, 3.0))
-                ## Clip the HUC4 nhdhr streamlines layer to the HUC10:
+
+                # Clip the HUC4 nhdhr streamlines layer to the HUC10:
                 funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj, spatial_ref, str_whitebox_path, logger)
 
                 ## Call preprocessing function:
-                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID, pit_fill)
+                if rd_strm_breach_wbt:
+                    dem_merge = funcs_v2.cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_proj, str_nhdhr_huc10, census_roads, str_whitebox_path)
+                    funcs_v2.breach_dem(str_whitebox_path, dem_merge, str_breached_dem_path)
 
+                elif rd_strm_breach_gs:
+                    dem_merge = funcs_v2.cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_proj, str_nhdhr_huc10, census_roads, str_whitebox_path)
+                    funcs_v2.breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_path, spatial_ref)
+
+                elif breach_gs:
+                    funcs_v2.breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_path, spatial_ref)
+                    
+                elif breach_wbt:             
+                    # default breach
+                    funcs_v2.breach_dem(str_whitebox_path, str_dem_proj, str_breached_dem_path)
+              
+                # additional preprocessing steps
+                funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref, 
+                                        str_mpi_path, str_taudem_dir, str_whitebox_path, 
+                                        run_wg, run_taudem, physio, 
+                                        hucID, str_breached_dem_path, inputProc)
+    
                 #### start of post-processing steps(???)
                 str_dem_path          = huc_dir  / f'{hucID}_dem_proj.tif'
-                str_breached_dem_path = huc_dir  / f'{hucID}_breach_proj.tif'
                 str_hand_path         = huc_dir  / f'{hucID}_breach_hand.tif'
                 str_net_path          = huc_dir  / f'{hucID}_breach_net.shp'
                 str_raster_net_path   = huc_dir  / f'{hucID}_breach_net.tif'    
@@ -244,6 +280,7 @@ if __name__ == '__main__':
                 # ========================== << BANK PIXELS AND WIDTH FROM CURVATURE >> ====================================
                 funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, 
                                                             cell_size, use_wavelet_curvature_method, logger) # YES!        
+
                 funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, 
                                                             str_reachid, i_step, max_buff, 
                                                             str_chanmet_segs, logger)        
@@ -258,244 +295,9 @@ if __name__ == '__main__':
                 # ============================ << FLOODPLAIN METRICS >> =====================================
                 # 1D approach:
                 funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path, logger)
+
                 # 2D approach:
                 funcs_v2.fp_metrics_chsegs(str_fim_path, 'ch_wid_tot', str_chanmet_segs, logger)
-    #===============================================================================================           
-    ## DRB file structure:
-    #===============================================================================================   
-#    for i, path in enumerate(lst_paths):
-#        
-#        if i < 9: continue
-#         
-#        print('Processing:  ' + path)
-#        
-#        start_time_i = timeit.default_timer()
-#    
-#        try:
-#            str_dem_path = glob.glob(os.path.join(path,'*_dem.tif'))[0]
-#            str_hand_path = glob.glob(os.path.join(path,'*hand*.tif'))[0]
-#            str_net_path = glob.glob(os.path.join(path,'*breach_net.shp'))[0]    
-#            str_sheds_path = glob.glob(os.path.join(path,'*w_diss_physio*.shp'))[0]
-#        except:
-#            print('WARNING:  There is an error in the paths!')
-#            pass # depending on what's being run, it might not matter if a file doesn't exist
-#        
-#        path_to_dem, dem_filename = os.path.split(str_dem_path)
-#        csv_filename = dem_filename[:-8] + '.csv'
-#        str_csv_path = os.path.join(path_to_dem, csv_filename)
-#        
-#        # Output layers...
-#        out_path=r'E:\bulk_processing\drb_chwidpixels_2018.09.10'
-#        str_chxns_path = os.path.join(out_path, dem_filename[:-8] + '_chxns.shp')
-#        str_chxns_path = os.path.join(out_path, dem_filename[:-8] + '_chxns.shp')
-#        str_fpxns_path = os.path.join(out_path, dem_filename[:-8] + '_fpxns.shp')
-#        str_bankpts_path = os.path.join(out_path, dem_filename[:-8] + '_bankpts.shp')
-#        str_bankpixels_path = os.path.join(out_path, dem_filename[:-8] + '_bankpixels.tif')
-#        
-#        # Call preprocessing function: 
-#        dst_crs = {'init': u'epsg:26918'} # NAD83, UTM18N  
-#        funcs_v2.preprocess_dem(str_dem_path, str_net_path, dst_crs, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)         
-        
-        # << GET CELL SIZE >>
-#        cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?        
 
-        # << BUILD STREAMLINES COORDINATES >>
-#        df_coords, streamlines_crs = funcs_v2.get_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid) # YES!        
-#        df_coords.to_csv(str_csv_path)
-#        df_coords = pd.read_csv(str_csv_path, )    
-#        streamlines_crs = {'init': u'epsg:26918'} # NAD83, UTM18N     
-
-#        # ============================= << CROSS SECTION ANALYSES >> =====================================
-#        # << CREATE Xn SHAPEFILES >>
-#        ## Channel:
-#        funcs_v2.write_xns_shp(df_coords, streamlines_crs, str(str_chxns_path), False, int(3))             
-#        ## Floodplain:
-##        funcs_v2.write_xns_shp(df_coords, streamlines_crs, str(str_fpxns_path), True, int(30))     
-#
-#        # << INTERPOLATE ELEVATION ALONG Xns >>
-#        df_xn_elev = funcs_v2.read_xns_shp_and_get_dem_window(str_chxns_path, str_dem_path)
-#        
-#        # Calculate channel metrics and write bank point shapefile...# NOTE:  Use raw DEM here??        
-#        funcs_v2.chanmetrics_bankpts(df_xn_elev, str_chxns_path, str_dem_path, str_bankpts_path, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh)
-        
-        # ========================== << BANK PIXELS AND WIDTH FROM CURVATURE >> ====================================
-#        funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, cell_size, use_wavelet_curvature_method) # YES!        
-#
-#        funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, i_step, max_buff)        
-#       
-#  
-#        # ============================= << DELINEATE FIM >> =====================================
-#        funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path, str_reachid)
-#        
-#        
-#        # ==================== CHANNEL WIDTH, FLOODPLAIN WIDTH, HAND ANALYSIS ALL IN ONE ===========
-#        funcs_v2.channel_and_fp_width_bankpixels_segments_po_2Dfpxns(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, p_buffxnlen, str_hand_path, parm_ivert)    
-        
-        print('\nRun time for {}:  {}\r\n'.format(path, timeit.default_timer() - start_time_i))
-
-        
-    #=============================================================================================== 
-    #                             BEGIN LOCAL TESTING SECTION
-    #===============================================================================================    
-    
-#    str_fim_path=r"D:\facet\dr_working_data\dr_working_data\dr3m_thresh.tif" ## test test
-#    str_dem_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18.tif"
-#    str_slp_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18_breach_sd8.tif"
-#    str_net_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18_breach_net.shp"
-#    str_bankpixels_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_utm18_bankpixels.tif"
-##    str_bankpts_path = r'D:\CFN_data\DEM_Files\020502061102_ChillisquaqueRiver\bankpts_TEST.shp'      
-##    str_chxns_path = r"D:\hand\nfie\020700\usgs\020700_chxns_test.shp"
-##    str_fpxns_path = r"D:\hand\nfie\020700\usgs\020700_fpxns_test.shp"
-#    str_hand_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18_breach_hand.tif"
-##    str_sheds_path = r"D:\drb\02040205\02040205_w_diss_physio.shp"
-##    str_startptgrid_path = r'D:\CFN_data\DEM_Files\020502061102_ChillisquaqueRiver\DEMnet_UNIQUE_ID.shp'
-#    
-#    ## Openness: THIS NEEDS WORK -- Table this til later if you have time (July5)
-##    str_pos_path = r'D:\Terrain_and_Bathymetry\USGS\CBP_analysis\DifficultRun\facet_tests\dr_pos_raw.tif'    
-#    ## Flow direction: For discerning between right/left bank?
-##    str_fdr_path = r"D:\Terrain_and_Bathymetry\USGS\CBP_analysis\DifficultRun\raw\dr3m_raw_dem_clip_utm18_breach_p.tif"     
-#    
-##    # << GET CELL SIZE >>
-#    cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
-##    
-##    # << DEM PRE-PROCESSING using TauDEM and Whitebox-GoSpatial >>              
-##    # (1) If necessary, clip original streamlines layer (NHD hi-res 4 digit HUC to DEM of interest)...     
-##    # Build the output streamlines file name...
-##    path_to_dem, dem_filename = os.path.split(str_dem_path)
-##    str_output_nhdhires_path = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp' 
-##    funcs_v2.clip_features(str_net_in_path, str_output_nhdhires_path, str_dem_path)     
-##     
-###      Call preprocessing function: 
-##    funcs_v2.preprocess_dem(str_dem_path, str_net_in_path, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)        
-#     
-###    # << BUILD STREAMLINES COORDINATES >>
-###    # Build reach coords and get crs from a pre-existing streamline shapefile...
-##    df_coords, streamlines_crs = funcs_v2.g str_fim_path=r"D:\facet\dr_working_data\dr_working_data\dr3m_thresh.tif" ## test test
-#    str_dem_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18.tif"
-#    str_slp_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18_breach_sd8.tif"
-#    str_net_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18_breach_net.shp"
-#    str_bankpixels_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_utm18_bankpixels.tif"
-##    str_bankpts_path = r'D:\CFN_data\DEM_Files\020502061102_ChillisquaqueRiver\bankpts_TEST.shp'      
-##    str_chxns_path = r"D:\hand\nfie\020700\usgs\020700_chxns_test.shp"
-##    str_fpxns_path = r"D:\hand\nfie\020700\usgs\020700_fpxns_test.shp"
-#    str_hand_path = r"D:\facet\dr_working_data\dr_working_data\dr3m_raw_dem_clip_utm18_breach_hand.tif"
-##    str_sheds_path = r"D:\drb\02040205\02040205_w_diss_physio.shp"
-##    str_startptgrid_path = r'D:\CFN_data\DEM_Files\020502061102_ChillisquaqueRiver\DEMnet_UNIQUE_ID.shp'
-#    
-#    ## Openness: THIS NEEDS WORK -- Table this til later if you have time (July5)
-##    str_pos_path = r'D:\Terrain_and_Bathymetry\USGS\CBP_analysis\DifficultRun\facet_tests\dr_pos_raw.tif'    
-#    ## Flow direction: For discerning between right/left bank?
-##    str_fdr_path = r"D:\Terrain_and_Bathymetry\USGS\CBP_analysis\DifficultRun\raw\dr3m_raw_dem_clip_utm18_breach_p.tif"     
-#    
-##    # << GET CELL SIZE >>
-#    cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
-##    
-##    # << DEM PRE-PROCESSING using TauDEM and Whitebox-GoSpatial >>              
-##    # (1) If necessary, clip original streamlines layer (NHD hi-res 4 digit HUC to DEM of interest)...     
-##    # Build the output streamlines file name...
-##    path_to_dem, dem_filename = os.path.split(str_dem_path)
-##    str_output_nhdhires_path = path_to_dem + '\\' + dem_filename[:-4]+'_nhdhires.shp' 
-##    funcs_v2.clip_features(str_net_in_path, str_output_nhdhires_path, str_dem_path)     
-##     
-###      Call preprocessing function: 
-##    funcs_v2.preprocess_dem(str_dem_path, str_net_in_path, str_mpi_path, str_taudem_dir, str_whitebox_path, run_whitebox, run_wg, run_taudem)        
-#     
-###    # << BUILD STREAMLINES COORDINATES >>
-###    # Build reach coords and get crs from a pre-existing streamline shapefile...
-##    df_coords, streamlines_crs = funcs_v2.get_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid) # YES!
-##    df_coords.to_csv(r"D:\facet\dr_working_data\dr_working_data\dr3m_coords.csv") # save to a csv for testing (faster to read pre-calculated coords)
-#    
-##    print('NOTE:  Reading pre-calculated csv file...')
-#    df_coords = pd.read_csv(r"D:\facet\dr_working_data\dr_working_data\dr3m_coords.csv")
-##    df_coords = pd.read_csv('df_coords_Chillisquaque.csv', )
-##    df_coords = pd.read_csv('df_coords_020802.csv', )    
-##    df_coords = pd.read_csv(r"D:\hand\nfie\020700\df_coords_020700.csv", )
-#    streamlines_crs = {'init': u'epsg:26918'} # NAD83, UTM18N    
-#    
-##   # << BANK POINTS FROM CROSS-SECTIONS >>
-#    # Create Xn shapefiles:
-##    # Channel:
-##    funcs_v2.write_xns_shp(df_coords, streamlines_crs, str(str_xns_path), False, int(3), int(3), float(30))     
-##    # FP:
-##    funcs_v2.write_xns_shp(df_coords, streamlines_crs, str(str_fpxns_path), True, int(30))  # For FP width testing
-##
-###    # Interpolate elevation along Xns:
-##    df_xn_elev = funcs_v2.read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path)
-##    
-###    print('Writing df_xn_elev to .csv for testing...')
-###    df_xn_elev.to_csv(columns=['index','linkno','elev','xn_row','xn_col']) 
-###    df_xn_elev2 = pd.read_csv('df_xn_elev.csv') #, dtype={'linko':np.int,'elev':np.float,'xn_row':np.float,'xn_col':np.float})
-## 
-##    # Calculate channel metrics and write bank point shapefile:
-##    print('Calculating channel metrics from bank points...')
-##    funcs_v2.chanmetrics_bankpts(df_xn_elev, str_xns_path, str_dem_path, str_bankpts_path, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh)    
-#  
-##    # << BANK PIXELS FROM CURVATURE >>
-##    funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, cell_size, use_wavelet_curvature_method)
-#    
-##    # Testing openness:
-##    funcs_v2.bankpixels_from_openness_window(df_coords, str_pos_path, str_bankpixels_path) 
-##    funcs_v2.bankpixels_from_openness_window_buffer_all(df_coords, str_dem_path, str_net_path, str_pos_path, str_neg_path) 
-#
-#    # << FLOOD INUNDATION MAP (FIM) FROM HAND AND A POLYGON (eg, catchments) >>
-##    funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path) # NOTE:  Will need to know which regression eqn to use?
-#    
-##     << TESTING FLOODPLAIN WIDTH METHODS >> 
-##    buff_dist = 40
-##    funcs_v2.floodplain_width_2D_xns(str_xns_path, str_floodplain_path, buff_dist)
-##    funcs_v2.floodplain_width_fppixels_segments_po(df_coords, str_net_in_path, str_floodplain_path, str_reachid, cell_size)
-##    funcs_v2.floodplain_width_reach_buffers_po(funcs, str_net_path, str_fp_path, str_reachid, cell_size)
-#    
-#    # << CHANNEL WIDTH, FLOODPLAIN WIDTH, HAND ANALYSIS ALL IN ONE >>
-##    funcs_v2.channel_and_fp_width_bankpixels_segments_po_2Dfpxns(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, p_buffxnlen, str_hand_path, parm_ivert)    
-#    funcs_v2.channel_et_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid) # YES!
-##    df_coords.to_csv(r"D:\facet\dr_working_data\dr_working_data\dr3m_coords.csv") # save to a csv for testing (faster to read pre-calculated coords)
-#    
-##    print('NOTE:  Reading pre-calculated csv file...')
-#    df_coords = pd.read_csv(r"D:\facet\dr_working_data\dr_working_data\dr3m_coords.csv")
-##    df_coords = pd.read_csv('df_coords_Chillisquaque.csv', )
-##    df_coords = pd.read_csv('df_coords_020802.csv', )    
-##    df_coords = pd.read_csv(r"D:\hand\nfie\020700\df_coords_020700.csv", )
-#    streamlines_crs = {'init': u'epsg:26918'} # NAD83, UTM18N    
-#    
-##   # << BANK POINTS FROM CROSS-SECTIONS >>
-#    # Create Xn shapefiles:
-##    # Channel:
-##    funcs_v2.write_xns_shp(df_coords, streamlines_crs, str(str_xns_path), False, int(3), int(3), float(30))     
-##    # FP:
-##    funcs_v2.write_xns_shp(df_coords, streamlines_crs, str(str_fpxns_path), True, int(30))  # For FP width testing
-##
-###    # Interpolate elevation along Xns:
-##    df_xn_elev = funcs_v2.read_xns_shp_and_get_dem_window(str_xns_path, str_dem_path)
-##    
-###    print('Writing df_xn_elev to .csv for testing...')
-###    df_xn_elev.to_csv(columns=['index','linkno','elev','xn_row','xn_col']) 
-###    df_xn_elev2 = pd.read_csv('df_xn_elev.csv') #, dtype={'linko':np.int,'elev':np.float,'xn_row':np.float,'xn_col':np.float})
-## 
-##    # Calculate channel metrics and write bank point shapefile:
-##    print('Calculating channel metrics from bank points...')
-##    funcs_v2.chanmetrics_bankpts(df_xn_elev, str_xns_path, str_dem_path, str_bankpts_path, parm_ivert, XnPtDist, parm_ratiothresh, parm_slpthresh)    
-#  
-##    # << BANK PIXELS FROM CURVATURE >>
-##    funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, cell_size, use_wavelet_curvature_method)
-#    
-##    # Testing openness:
-##    funcs_v2.bankpixels_from_openness_window(df_coords, str_pos_path, str_bankpixels_path) 
-##    funcs_v2.bankpixels_from_openness_window_buffer_all(df_coords, str_dem_path, str_net_path, str_pos_path, str_neg_path) 
-#
-#    # << FLOOD INUNDATION MAP (FIM) FROM HAND AND A POLYGON (eg, catchments) >>
-##    funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path) # NOTE:  Will need to know which regression eqn to use?
-#    
-##     << TESTING FLOODPLAIN WIDTH METHODS >> 
-##    buff_dist = 40
-##    funcs_v2.floodplain_width_2D_xns(str_xns_path, str_floodplain_path, buff_dist)
-##    funcs_v2.floodplain_width_fppixels_segments_po(df_coords, str_net_in_path, str_floodplain_path, str_reachid, cell_size)
-##    funcs_v2.floodplain_width_reach_buffers_po(funcs, str_net_path, str_fp_path, str_reachid, cell_size)
-#    
-#    # << CHANNEL WIDTH, FLOODPLAIN WIDTH, HAND ANALYSIS ALL IN ONE >>
-##    funcs_v2.channel_and_fp_width_bankpixels_segments_po_2Dfpxns(df_coords, str_net_path, str_bankpixels_path, str_reachid, cell_size, p_buffxnlen, str_hand_path, parm_ivert)    
-##    funcs_v2.channel_and_fp_2Dxn_analysis(df_coords, str_net_path, str_bankpixels_path, str_hand_path, str_fim_path, str_reachid, cell_size, i_step, max_buff, p_fpxnlen)
-
-    # print('\n<<< End >>>\r\n')
-    # print('Total Run Time:  {}'.format(timeit.default_timer() - start_time_0))
-    
+                end_time = time.clock() - start_time_i
+                logger.info(f'\nRun time for {hucID}:  {end_time}\r\n')

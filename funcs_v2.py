@@ -7,6 +7,7 @@ Created on Wed Dec  7 14:51:45 2016
 from pathlib import Path
 #import pprint # neat!
 
+import time
 #import math
 import itertools
 import subprocess
@@ -16,6 +17,7 @@ from numpy import asarray
 
 #from scipy.stats import gaussian_kde # TEST
 #from scipy.optimize import curve_fit # TEST
+import scipy.ndimage as sc
 from scipy import signal
 from scipy.ndimage import percentile_filter, label
 
@@ -25,11 +27,10 @@ from math import atan, ceil
 import sys
 from math import isinf, sqrt
 import rasterio
-import rasterio.mask
-from rasterio.warp import transform
-from rasterio.warp import calculate_default_transform, reproject, Resampling
-from rasterio.features import shapes
+from rasterio import merge, mask
+from rasterio.warp import calculate_default_transform, reproject, Resampling, transform
 import rasterio.features
+from rasterio.features import shapes
 
 #import matplotlib
 #matplotlib.use('TkAgg')
@@ -68,7 +69,234 @@ np.seterr(over='raise')
 #if speedups.available:
 #    speedups.enable() # enable performance enhancements written in C
 
+def breach_dem(str_whitebox_path, str_dem_path, breach_output):
+    
+    path_WBT        = f"{str_whitebox_path}\\whitebox_tools.exe"
+    tool_WBT        = "-r=BreachDepressions"
+    input_WBT       = f"-i={str_dem_path}"
+    output_WBT      = f"-o={breach_output}"
+    fill_pits_var   = "--fill_pits=True"
 
+    exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT, fill_pits_var] + ["-v"]
+    # print (exec_WBT)
+    try:
+        subprocess.check_call(exec_WBT)
+    except subprocess.CalledProcessError:
+        sys.exit(0)
+    # finally:
+    #     return breach_output
+
+def str2bool(x):
+    if x in ('True', 'true', 't', 'T'):
+        return True
+    elif x in ('False', 'false', 'f', 'F'):
+        return False
+
+def run_tauDEM(cmd):
+    ''' execute tauDEM commands '''
+
+    try:
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        output, err = p.communicate()
+
+        # Get some feedback from the process to print out...
+        if err is None:
+            text = output.decode()
+            print('\n', text, '\n')
+        else:
+            print (err)
+
+    except subprocess.CalledProcessError as e:
+        print(f'failed to return code: {e}')
+    except OSError as e:
+        print(f'failed to execute shell: {e}')
+    except IOError  as e:
+        print(f'failed to read file(s): {e}')
+
+    # # run command
+    # os.system(cmd)
+
+    # # Capture the contents of shell command and print
+    # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+
+    # # Get some feedback from the process to print out...
+    # message = "\n"
+    # for line in process.stdout.readlines():
+    #     line = line.decode()
+    #     if isinstance(line, bytes):	   # true in Python 3
+    #         line = line.decode()
+    #     message = message + line
+    # print(message)
+
+def open_memory_tif(arr, meta):
+    from rasterio.io import MemoryFile
+#     with rasterio.Env(GDAL_CACHEMAX=256, GDAL_NUM_THREADS='ALL_CPUS'):
+    with MemoryFile() as memfile:
+        with memfile.open(**meta) as dataset:
+            dataset.write(arr, indexes=1)
+        return memfile.open()
+
+def multi2single(gpdf):
+    '''
+    Reduces multipart polygons to singlepart polygons
+    Source: https://github.com/geopandas/geopandas/issues/369
+    '''
+    gpdf_singlepoly = gpdf[gpdf.geometry.type == 'Polygon']
+    gpdf_multipoly = gpdf[gpdf.geometry.type == 'MultiPolygon']
+
+    for i, row in gpdf_multipoly.iterrows():
+        Series_geometries = pd.Series(row.geometry)
+        df = pd.concat([gpd.GeoDataFrame(row, crs=gpdf_multipoly.crs).T]*len(Series_geometries), ignore_index=True)
+        df['geometry']  = Series_geometries
+        gpdf_singlepoly = pd.concat([gpdf_singlepoly, df])
+
+    gpdf_singlepoly.reset_index(inplace=True, drop=True)
+    return gpdf_singlepoly
+
+def breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_path, dst_crs):
+
+    # temp files 
+    tmp_dep     = 'tmp_breach.dep'
+    tmp_breach  = 'tmp_breach.tif'
+
+    # go-spatial dir & exe
+    gs_path = Path(gs_path)
+    gs_dir, gs_exe  = str(gs_path.parent), str(gs_path.name)
+
+    # 01 - execute go-spatial.exe and create .dep and .tas files
+    breach_args = f'{str_dem_proj.name};{tmp_dep};-1;-1;true;true'
+    print(breach_args, str(huc_dir))
+    run_gospatial_whiteboxtool('BreachDepressions', breach_args, gs_dir, gs_exe, str(huc_dir))
+
+    # 02 convert .dep to .tif
+    dep2tiff_args = f'{tmp_dep};{tmp_breach}'
+    run_gospatial_whiteboxtool('Whitebox2GeoTiff', dep2tiff_args, gs_dir, gs_exe, str(huc_dir))
+
+    # 03 define projection 
+    breach_unproj = str(huc_dir / tmp_breach)
+    define_grid_projection(breach_unproj, dst_crs, str_breached_dem_path)
+
+    for i in [tmp_dep, tmp_breach, 'tmp_breach.tas']:
+        os.remove(huc_dir / i)
+
+# ===============================================================================
+#  Hydrologically condition DEM to allow breaching road & stream x-cross sections
+# ===============================================================================
+def cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_path, str_nhd_path, census_roads, str_whitebox_path):
+    st = time.clock()
+    # temp files
+    tmp_roads           = str(huc_dir / 'tmp_roads.shp')
+    dem_mask            = str(huc_dir / 'mask.shp')
+    x_sect_pts          = str(huc_dir / 'x_section_pts.shp')
+    x_sect_polys        = str(huc_dir / 'x_section_polys.shp')
+    ds_min_filter       = str(huc_dir / 'ds_min_filter.tif')
+    ds_min_clip         = str(huc_dir / 'ds_min_clip.tif')
+    dem_merge           = str(huc_dir / 'dem_road_stream.tif')
+    # dem_merge_breach    = str(huc_dir / f'{hucID}_dem_rd_strm_breach.tif')
+
+    # whitebox clip
+    path_WBT    = f"{str_whitebox_path}\\whitebox_tools.exe"
+    tool_WBT    = "-r=Clip"
+    input_WBT   = f"-i={census_roads}"
+    clip_WBT    = f"--clip={dem_mask}"
+    output_WBT  = f"-o={tmp_roads}"
+
+    exec_WBT = [path_WBT, tool_WBT, input_WBT, clip_WBT, output_WBT] + ["-v"]
+    # print (exec_WBT)
+    try:
+        subprocess.check_call(exec_WBT)
+    except subprocess.CalledProcessError:
+        sys.exit(0)
+
+    # TODO -- replace WBT's intersection method with Fiona+Shapely solution
+    path_WBT    = f"{str_whitebox_path}\\whitebox_tools.exe"
+    tool_WBT    = "-r=LineIntersections"
+    i1_WBT      = f"--i1={tmp_roads}"
+    i2_WBT      = f"--i2={str_nhd_path}"
+    output_WBT  = f"-o={x_sect_pts}"
+
+    exec_WBT = [path_WBT, tool_WBT, i1_WBT, i2_WBT, output_WBT] + ["-v"]
+    # print (exec_WBT)
+    try:
+        subprocess.check_call(exec_WBT)
+    except subprocess.CalledProcessError:
+        sys.exit(0)
+
+    # Get the line layers:
+    gdf_nhd     = gpd.read_file(str(str_nhd_path))
+    gdf_roads   = gpd.read_file(str(tmp_roads))
+    gdf_x_pts   = gpd.read_file(str(x_sect_pts))
+
+    # Buffer:
+    gdf_nhd['geometry']   = gdf_nhd['geometry'].buffer(25) # projected units (m)
+    gdf_roads['geometry'] = gdf_roads['geometry'].buffer(50) # projected units (m)
+    gdf_x_pts['geometry'] = gdf_x_pts['geometry'].buffer(50) # projected units (m)
+
+    # Intersect
+    intersect_1 = gpd.overlay(gdf_nhd, gdf_roads, how='intersection') # nhd x roads
+    gdf_x_sect_polys = gpd.overlay(gdf_x_pts, intersect_1, how='intersection')# x-section pts x nhd + roads
+
+    # poly_int_sp = multi2single(intersect_2)
+
+    # Add common ID field
+    # gdf_x_sect_polys['id'] = np.arange(gdf_x_sect_polys.shape[0])
+    gdf_x_sect_polys['id'] = 1
+    gdf_x_sect_polys = gdf_x_sect_polys.dissolve(by='id')
+    gdf_x_sect_polys.to_file(x_sect_polys)
+
+    ''' passing circular kernel as footprint arg slows down...
+            scipy.ndimge.minimum_filter(), so pass 150,150
+            square window dims'''
+    # # Define focal stat kernel and run local minimum filter
+    # radius = 75  # num pixels
+    # kernel = np.zeros((2 * radius + 1, 2 * radius + 1))
+    # y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+    # mask2 = x ** 2 + y ** 2 <= radius ** 2
+    # kernel[mask2] = 1
+
+    # Apply the filter:
+
+    # Get the DEM:
+    with rasterio.open(str(str_dem_path)) as ds_dem:
+        profile = ds_dem.profile.copy()
+        arr_dem = ds_dem.read(1)
+
+    # apply local minima filter
+    arr_min = sc.minimum_filter(arr_dem, size=(150,150)) # footprint=kernel
+            
+    # Write out min. filtered DEM
+    ''' Write our arr_min as tif -- 
+            issues with reading the array as in-mem
+            raster object '''
+    with rasterio.open(ds_min_filter, 'w', **profile) as dst:
+        dst.write_band(1, arr_min)
+
+    # clip ds_min_filter.tif by x-section polys
+    path_WBT    = f"{str_whitebox_path}\\whitebox_tools.exe"
+    tool_WBT    = "-r=ClipRasterToPolygon"
+    i_WBT       = f"-i={ds_min_filter}"
+    poly_WBT    = f"--polygons={x_sect_polys}"
+    output_WBT  = f"-o={ds_min_clip}"
+    option_WBT  = "--maintain_dimensions" # =True"
+
+    exec_WBT = [path_WBT, tool_WBT, i_WBT, poly_WBT, output_WBT, option_WBT] + ["-v"]
+    print (exec_WBT)
+    try:
+        subprocess.check_call(exec_WBT)
+    except subprocess.CalledProcessError:
+        sys.exit(0)
+
+    # Read DEMs
+    dem_min = open_memory_tif(rasterio.open(ds_min_clip, 'r').read(1), profile)
+    base_dem = open_memory_tif(arr_dem, profile)
+    with rasterio.open(dem_merge, 'w', **profile) as dst:
+        # merge happens in sequence of rasters
+        arr_merge, arr_trans = merge.merge([dem_min, base_dem])
+        dst.write(arr_merge)
+    
+    return dem_merge
+
+    print(time.clock() - st)
 # ===============================================================================
 #  Utility functions
 # ===============================================================================
@@ -731,14 +959,16 @@ def run_gospatial_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback
         cmd = []
         cmd.append("." + os.path.sep + exe_name)
         if len(wd) > 0:
-            cmd.append("-cwd=\"{}\"".format(wd))
+            cmd.append(f'-cwd="{wd}"')
 
         cmd.append("-run={}".format(tool_name))
-        args_str = ""
-        for s in args:
-            args_str += s.replace("\"", "") + ";"
-        args_str = args_str[:-1]
-        cmd.append("-args=\"{}\"".format(args_str))
+
+        if ';' in args:
+            args = args.replace(" ", "") # strip spaces
+            cmd.append(f'-args=\"{args}\"')
+        else:
+            print("Correct args separator is ';'")
+            sys.exit(0)
 
         ps = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True)
 
@@ -801,15 +1031,15 @@ def run_rust_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback = de
 #   1. Breaching and filling
 #   2. TauDEM functions
 # ===============================================================================
-def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_whitebox, run_wg, run_taudem, physio, hucID, pit_fill):
+def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_wg, run_taudem, physio, hucID, breach_filepath, inputProc):
     try:
-        inputProc = str(2) # number of cores to use for TauDEM processes
-
         # << Define all filenames here >>
-        str_dem_path             = str(root / f'{hucID}_dem_proj.tif')
-        breach_filepath_tif_tmp  = str(root / f'{hucID}_breach_tmp_proj.tif')
-        breach_filepath_tif_proj = str(root / f'{hucID}_breach_proj.tif')
-        breach_filepath_dep      = str(root / f'{hucID}_breach.dep')
+        str_dem_path         = str(root / f'{hucID}_dem_proj.tif')
+        # breach_filepath      = str(root / f'{hucID}_breach.tif')
+        # rd_strm_dem_filepath = str(root / f'{hucID}_dem_rd_strm_breach.tif')
+        # breach_filepath_dep      = str(root / f'{hucID}_breach.dep')
+        # breach_filepath_tif_tmp  = str(root / f'{hucID}_breach_tmp_proj.tif')
+        # breach_filepath_tif_proj = str(root / f'{hucID}_breach_proj.tif')
 
         str_danglepts_path = str(root / f'{hucID}_wg.tif')
         p                  = str(root / f'{hucID}_breach_p.tif')
@@ -826,7 +1056,6 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         ang                = str(root / f'{hucID}_breach_ang.tif')
         dd                 = str(root / f'{hucID}_breach_hand.tif')
         wshed_physio       = str(root / f'{hucID}_breach_w_diss_physio.shp')
-
 
         # print ("01", str_dem_path)
         # print ("02", breach_filepath_tif_tmp)
@@ -867,199 +1096,63 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         Arg Name: SubsequentFilling, type: bool, Description: Perform post-breach filling?
         '''
         # =================== << Whitebox Functions >> =====================
-        if run_whitebox:
+        # if run_whitebox:
+        #     path_WBT        = f"{str_whitebox_path}\\whitebox_tools.exe"
+        #     tool_WBT        = "-r=BreachDepressions"
+        #     input_WBT       = f"-i={str_dem_path}"
+        #     output_WBT      = f"-o={breach_filepath_tif_tmp}"
+        #     fill_pits_var   = "--fill_pits={pit_fill}"
 
-            path_WBT        = f"{str_whitebox_path}\\whitebox_tools.exe"
-            tool_WBT        = "-r=BreachDepressions"
-            input_WBT       = f"-i={str_dem_path}"
-            output_WBT      = f"-o={breach_filepath_tif_tmp}"
-            fill_pits_var   = "--fill_pits={pit_fill}"
+        #     exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT, fill_pits_var] + ["-v"]
+        #     # print (exec_WBT)
+        #     try:
+        #         subprocess.check_call(exec_WBT)
+        #     except subprocess.CalledProcessError:
+        #         sys.exit(0)
 
-            exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT, fill_pits_var] + ["-v"]
-            # print (exec_WBT)
-            try:
-                subprocess.check_call(exec_WBT)
-            except subprocess.CalledProcessError:
-                sys.exit(0)
-
-            define_grid_projection(breach_filepath_tif_tmp, dst_crs, breach_filepath_tif_proj)
-
-            ## Remove native Whitebox files and unprojected tif:
-            # dep_path=path_to_dem + '\\' + breach_filename_dep
-            # tas_path=path_to_dem + '\\' + breach_filename_dep[:-3]+'tas'
-            # os.remove(dep_path)
-            # os.remove(tas_path)
-            # os.remove(breach_filepath_tif)
-            """
-            print('Whitebox .exe path:  ' + 'r' + '"' + str_whitebox_path + '"')
-            str_whitebox_dir, str_whitebox_exe = os.path.split(str_whitebox_path)
-
-            ## << Run the BreachDepressions tool, specifying the arguments >>
-            name = "BreachDepressions"
-            args = [dem_filename_tif, breach_filename_dep, '-1', '-1', 'True', 'True'] # GoSpatial verion. NOTE:  Make these last four variables accessible to user?
-#            args = ['--dem='+dem_filename, '-o='+breach_filename_dep] # Rust version
-
-            ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
-#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
-            if ret != 0:
-                print("ERROR: return value={}".format(ret))
-
-            ##  << Convert .dep to .tif here? >>  NOTE:  Only for DRB hack when using .dep files
-            name = "WhiteBox2GeoTiff"
-            args = [breach_filename_dep, breach_filename_tif]
-
-            ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
-            if ret != 0:
-                print("ERROR: return value={}".format(ret))
-
-            ## The converted TIFF file is saved without a crs, so save a projected version:
-            define_grid_projection(breach_filepath_tif, dst_crs, breach_filepath_tif_proj)
-
-            ## Remove native Whitebox files and unprojected tif:
-            dep_path=path_to_dem + '\\' + breach_filename_dep
-            tas_path=path_to_dem + '\\' + breach_filename_dep[:-3]+'tas'
-            os.remove(dep_path)
-            os.remove(tas_path)
-            os.remove(breach_filepath_tif)
-            sys.exit
-            """
-#            # Rust version...
-#            name = "ConvertRasterFormat"
-#            args = ['--input='+breach_filename_dep, '-o='+breach_filename_tif]
-#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
-
-#            # << Also convert original DEM .dep to a .tif >>
-#            name = "WhiteBox2GeoTiff"
-#            args = [dem_filename, dem_filename_tif]
-#
-#            ret = run_gospatial_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
-#            if ret != 0:
-#                print("ERROR: return value={}".format(ret))
-
-            # Rust version...
-#            name = "ConvertRasterFormat"
-#            args = ['--input='+dem_filename, '-o='+dem_filename_tif]
-#            ret = run_rust_whiteboxtool(name, args, str_whitebox_dir, str_whitebox_exe, path_to_dem, callback)
+        #     # define_grid_projection(breach_filepath_tif_tmp, dst_crs, breach_filepath_tif_proj)
 
         if run_wg:
             create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts_path)
 
         if run_taudem:
-
-            # Testing...
-            # mpipath = 'r' +  '"' + mpipath + '"'
-            # fel = 'r' +  '"' + fel + '"'
-
-            # print('mpipath: ' + mpipath)
-            # print('fel: ' + fel_breach)
-            # print(' ')
-
-            # ==============  << 1. Pit Filling with TauDEM >> ================
-            # cmd = 'mpiexec' + ' -n ' + inputProc + ' PitRemove -z ' + '"' + str_dem_path_tif + '"' + ' -fel ' + '"' + fel_pitremove + '"'
-            # """            
-            # cmd = f'mpiexec -n {inputProc} PitRemove -z "{str_dem_path_tif}" -fel "{fel_pitremove}"'
-
-            # # Submit command to operating system
-            # print('Running TauDEM PitRemove...')
-            # os.system(cmd)
-
-            # # Capture the contents of shell command and print it to the arcgis dialog box
-            # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-
-            # # Get some feedback from the process to print out...
-            # message = "\n"
-            # for line in process.stdout.readlines():
-            #     line = line.decode()
-            #     if isinstance(line, bytes):	   # true in Python 3
-            #         line = line.decode()
-            #     message = message + line
-            # print(message)
-            # """
             # ==============  << 2. D8 FDR with TauDEM >> ================       YES
-#            cmd = '"' + mpipath + '"' + ' -n ' + inputProc + ' ' + d8flowdir + ' -fel ' + '"' + str_dem_path + '"' + ' -p ' + '"' + p + '"' + \
-#                  ' -sd8 ' + '"' + sd8 + '"'
-
-            # cmd = 'mpiexec' + ' -n ' + inputProc + ' d8flowdir -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -p ' + '"' + p + '"' + \
-            #       ' -sd8 ' + '"' + sd8 + '"'
-            # print (cmd)
-
-            cmd = f'mpiexec -n {inputProc} d8flowdir -fel "{breach_filepath_tif_proj}" -p "{p}" -sd8 "{sd8}"'
+            # if rd_strm_breach and Path(rd_strm_dem_filepath).is_file():
+            #     breach_fpath = rd_strm_dem_filepath 
+            # else:
+            #     breach_fpath = breach_filepath 
+                
+            d8_flow_dir = f'mpiexec -n {inputProc} d8flowdir -fel "{breach_filepath}" -p "{p}" -sd8 "{sd8}"'
+            print(d8_flow_dir)
 
             # Submit command to operating system
             print('Running TauDEM D8 Flow Direction...')
-            os.system(cmd)
-#
-            # Capture the contents of shell command and print it to the arcgis dialog box
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+            run_tauDEM(d8_flow_dir)
 
-            # Get some feedback from the process to print out...
-            message = "\n"
-            for line in process.stdout.readlines():
-                line = line.decode()
-                if isinstance(line, bytes):	   # true in Python 3
-                    line = line.decode()
-                message = message + line
-            print(message)
-
-    #        # ============= << 3.a AD8 with weight grid >> ================        YES
-    #        cmd = 'mpiexec -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_wg + '"'  + ' -wg ' + '"' + str_danglepts_path + '"'  + ' -nc '
-            # cmd = 'mpiexec' + ' -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_wg + '"'  + ' -wg ' + '"' + str_danglepts_path + '"'  + ' -nc '
-
-            cmd = f'mpiexec -n {inputProc} AreaD8 -p "{p}" -ad8 "{ad8_wg}" -wg "{str_danglepts_path}" -nc'
+            # ============= << 3.a AD8 with weight grid >> ================        YES
+            # flow accumulation with NHD end nodes is used to derive stream network
+            d8_flow_acc_w_grid = f'mpiexec -n {inputProc} AreaD8 -p "{p}" -ad8 "{ad8_wg}" -wg "{str_danglepts_path}" -nc'
 
             # Submit command to operating system
             print('Running TauDEM D8 FAC (with weight grid)...')
-            os.system(cmd)
-            # Capture the contents of shell command and print it to the arcgis dialog box
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+            run_tauDEM(d8_flow_acc_w_grid)
 
-            message = "\n"
-            for line in process.stdout.readlines():
-                if isinstance(line, bytes):	    # true in Python 3
-                    line = line.decode()
-                message = message + line
-            print(message)
-
-           # ============= << 3.b AD8 no weight grid >> ================
-#        cmd = 'mpiexec -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_no_wg + '"'  +  ' -nc '
-            # cmd = 'mpiexec -n ' + inputProc + ' AreaD8 -p ' + '"' + p + '"' + ' -ad8 ' + '"' + ad8_no_wg + '"'  +  ' -nc '
-            cmd = f'mpiexec -n {inputProc} AreaD8 -p "{p}" -ad8 "{ad8_no_wg}" -nc'
+            # ============= << 3.b AD8 no weight grid >> ================
+            # flow accumulation with-OUT NHD end nodes is used to derive sub-watersheds
+            d8_flow_acc_wo_grid = f'mpiexec -n {inputProc} AreaD8 -p "{p}" -ad8 "{ad8_no_wg}" -nc'
 
             # Submit command to operating system
             print('Running TauDEM D8 FAC (no weights)...')
-            os.system(cmd)
-            # Capture the contents of shell command and print it to the arcgis dialog box
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-
-            message = "\n"
-            for line in process.stdout.readlines():
-                if isinstance(line, bytes):	    # true in Python 3
-                    line = line.decode()
-                message = message + line
-            print(message)
+            run_tauDEM(d8_flow_acc_wo_grid)
 
            # ============= << 4 StreamReachandWatershed with TauDEM >> ================
-            # cmd = 'mpiexec -n ' + inputProc + ' StreamNet -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -p ' + '"' + p + '"' + \
-            #         ' -ad8 ' + '"' + ad8_no_wg + '"' + ' -src ' + '"' + ad8_wg + '"' + ' -ord ' + '"' + ord_g + '"' + ' -tree ' + \
-            #         '"' + tree + '"' + ' -coord ' + '"' + coord + '"' + ' -net ' + '"' + net + '"' + ' -w ' + '"' + w + \
-            #         '"'
-
-            cmd = f'mpiexec -n {inputProc} StreamNet -fel "{breach_filepath_tif_proj}" -p "{p}" ' \
+            reach_and_watershed = f'mpiexec -n {inputProc} StreamNet -fel "{breach_filepath}" -p "{p}" ' \
                   f'-ad8 "{ad8_no_wg}" -src "{ad8_wg}" -ord "{ord_g}" -tree "{tree}" -coord "{coord}" -net "{net}" -w "{w}"'
-
+            # cmd = f'mpiexec -n {inputProc} StreamNet -fel "{breach_filepath}" -p "{p}" ' \
+            #       f'-ad8 "{ad8_no_wg}" -src "{ad8_wg}" -ord "{ord_g}" -tree "{tree}" -coord "{coord}" -net "{net}" -w "{w}"'
             # Submit command to operating system
             print('Running TauDEM Stream Reach and Watershed...')
-            os.system(cmd)
-
-            # Capture the contents of shell command and print it to the arcgis dialog box
-            process=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-
-            message = "\n"
-            for line in process.stdout.readlines():
-                if isinstance(line, bytes):	    # true in Python 3
-                    line = line.decode()
-                message = message + line
-            print(message)
+            run_tauDEM(reach_and_watershed)
 
             # Let's get rid of some output that we are not currently using...
     #            try:
@@ -1072,52 +1165,23 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
     #                pass
 
             # ============= << 5. Dinf with TauDEM >> =============        YES
-            print('Running TauDEM Dinfinity...')
-            # cmd = 'mpiexec -n ' + inputProc + ' DinfFlowDir -fel ' + '"' + breach_filepath_tif_proj + '"' + ' -ang ' + '"' + ang + '"' + \
-            #     ' -slp ' + '"' + slp + '"'
-
-            cmd = f'mpiexec -n {inputProc} DinfFlowDir -fel "{breach_filepath_tif_proj}" -ang "{ang}" -slp "{slp}"'
+            dInf_flow_dir = f'mpiexec -n {inputProc} DinfFlowDir -fel "{breach_filepath}" -ang "{ang}" -slp "{slp}"'
+            # cmd = f'mpiexec -n {inputProc} DinfFlowDir -fel "{breach_filepath}" -ang "{ang}" -slp "{slp}"'
 
             # Submit command to operating system
-            os.system(cmd)
-
-            # Capture the contents of shell command and print it to the arcgis dialog box
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-
-            # Get some feedback from the process to print out...
-            message = "\n"
-            for line in process.stdout.readlines():
-                line = line.decode()
-        #            if isinstance(line, bytes):	   # true in Python 3
-        #                line = line.decode()
-                message = message + line
-            print(message)
+            print('Running TauDEM Dinfinity...')
+            run_tauDEM(dInf_flow_dir)
 
             # ============= << 6. DinfDistanceDown (HAND) with TauDEM >> ============= YES
+            # Use original DEM here...
             distmeth = 'v'
             statmeth = 'ave'
 
-            # Use original DEM here...
+            dInf_dist_down = f'mpiexec -n {inputProc} DinfDistDown -fel "{str_dem_path}" -ang "{ang}" -src "{ad8_wg}" -dd "{dd}" -m {statmeth} {distmeth}'
+
             print('Running TauDEM Dinf Distance Down...') # Use Breached or Raw DEM here?? Currently using Raw
-            # cmd = 'mpiexec -n ' + inputProc + ' DinfDistDown -fel ' + '"' + str_dem_path_tif + '"' + ' -ang ' + '"' + ang + '"' + \
-            #       ' -src ' + '"' + ad8_wg + '"' + ' -dd ' + '"' + dd + '"' + ' -m ' + statmeth + ' ' + distmeth
-
-            cmd = f'mpiexec -n {inputProc} DinfDistDown -fel "{str_dem_path}" -ang "{ang}" -src "{ad8_wg}" -dd "{dd}" -m {statmeth} {distmeth}'
-
             # Submit command to operating system
-            os.system(cmd)
-
-            # Get some feedback from the process to print out...
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-
-            message = "\n"
-            for line in process.stdout.readlines():
-                line = line.decode()
-        #            if isinstance(line, bytes):	   # true in Python 3
-        #                line = line.decode()
-                message = message + line
-
-            print(message)
+            run_tauDEM(dInf_dist_down)
 
             # polygonize watersheds
             watershed_polygonize(w, w_shp)
