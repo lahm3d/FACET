@@ -15,6 +15,7 @@ import pandas as pd
 import logging
 import configparser
 from pathlib import Path
+import json
 
 #from functools import partial
 #import multiprocessing
@@ -176,7 +177,11 @@ if __name__ == '__main__':
             break
         
         # Re-project the NHD to match the DEM:
+        time_dict = {}
+        ## Re-project the NHD to match the DEM:
+        st = time.clock()        
         str_nhdhr_huc4_proj = funcs_v2.reproject_vector_layer(path, str_nhdhr_huc4, spatial_ref)  # Z:\facet\CFN_CB_HUC10\0205\0205_proj.shp
+        time_dict['reproject_vector_layer'] = float(time.clock()-st)        
 
         for root, dirs, files in os.walk(path):
             for huc_dir in dirs:
@@ -205,32 +210,50 @@ if __name__ == '__main__':
                 str_breached_dem_path   = huc_dir  / f'{hucID}_breach.tif'
                 
                 # Project dem raster
+                st = time.clock()
                 str_dem_path_proj = funcs_v2.reproject_grid_layer(str_dem_path, spatial_ref, str_dem_proj, resolution=(3.0, 3.0))
+                time_dict['reproject_grid_layer'] = float(time.clock()-st)
 
                 # Clip the HUC4 nhdhr streamlines layer to the HUC10:
+                st = time.clock()
                 funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj, spatial_ref, str_whitebox_path, logger)
+                time_dict['clip_features_using_grid'] = float(time.clock()-st)
 
                 ## Call preprocessing function:
                 if rd_strm_breach_wbt:
+                    st = time.clock()
                     dem_merge = funcs_v2.cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_proj, str_nhdhr_huc10, census_roads, str_whitebox_path)
+                    time_dict['cond_dem_for_road_x_stream_crossings'] = float(time.clock()-st)
+
+                    st = time.clock()
                     funcs_v2.breach_dem(str_whitebox_path, dem_merge, str_breached_dem_path)
+                    time_dict['breach_dem'] = float(time.clock()-st)
 
                 elif rd_strm_breach_gs:
+                    st = time.clock()
                     dem_merge = funcs_v2.cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_proj, str_nhdhr_huc10, census_roads, str_whitebox_path)
+                    time_dict['cond_dem_for_road_x_stream_crossings'] = float(time.clock()-st)
+
+                    st = time.clock()
                     funcs_v2.breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_path, spatial_ref)
+                    time_dict['breach_using_gs_wbt_method'] = float(time.clock()-st)
 
                 elif breach_gs:
+                    st = time.clock()
                     funcs_v2.breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_path, spatial_ref)
+                    time_dict['breach_using_gs_wbt_method'] = float(time.clock()-st)
                     
                 elif breach_wbt:             
                     # default breach
                     funcs_v2.breach_dem(str_whitebox_path, str_dem_proj, str_breached_dem_path)
               
                 # additional preprocessing steps
+                st = time.clock()
                 funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref, 
                                         str_mpi_path, str_taudem_dir, str_whitebox_path, 
                                         run_wg, run_taudem, physio, 
                                         hucID, str_breached_dem_path, inputProc)
+                time_dict['preprocess_dem'] = float(time.clock()-st)
     
                 #### start of post-processing steps(???)
                 str_dem_path          = huc_dir  / f'{hucID}_dem_proj.tif'
@@ -250,54 +273,81 @@ if __name__ == '__main__':
                 str_comp_path         = huc_dir / f'{hucID}_breach_comp.tif'
                 
                 # Convert vector streamlines to raster with pixel streamline values matching linkno:
+                st = time.clock()
                 funcs_v2.rasterize_gdf(str_net_path, str_hand_path, str_raster_net_path, None, None)
+                time_dict['rasterize_gdf'] = float(time.clock()-st)
 
                 # << GET CELL SIZE >>
                 cell_size = int(funcs_v2.get_cell_size(str_dem_path)) # range functions need int?
 
                 # << BUILD STREAMLINES COORDINATES >>
+                st = time.clock()
                 logger.info('Generating the stream network coordinates from the csv file...')
                 df_coords, streamlines_crs = funcs_v2.get_stream_coords_from_features(str_net_path, cell_size, str_reachid, str_orderid, logger) # YES!
                 df_coords.to_csv(str_csv_path)
                 logger.info('Reading the stream network coordinates from the csv file...')
                 df_coords = pd.read_csv(str_csv_path,)
+                time_dict['BUILD STREAMLINES COORDINATES'] = float(time.clock()-st)
 
                 # ============================= << CROSS SECTION ANALYSES >> =====================================
+                st = time.clock()
                 # << CREATE Xn SHAPEFILES >>
                 # Channel:
                 funcs_v2.write_xns_shp(df_coords, streamlines_crs, str_chxns_path, False, int(3), logger)             
                 # Floodplain:
                 funcs_v2.write_xns_shp(df_coords, streamlines_crs, str_fpxns_path, True, int(30), logger)     
+                time_dict['CREATE Xn SHAPEFILES'] = float(time.clock()-st)
 
                 # << INTERPOLATE ELEVATION ALONG Xns >>
+                st = time.clock()
                 df_xn_elev = funcs_v2.read_xns_shp_and_get_dem_window(str_chxns_path, str_dem_path, logger)
+                time_dict['INTERPOLATE ELEVATION ALONG Xns'] = float(time.clock()-st)
 
                 # Calculate channel metrics and write bank point shapefile...# NOTE:  Use raw DEM here??        
+                st = time.clock()
                 funcs_v2.chanmetrics_bankpts(df_xn_elev, str_chxns_path, str_dem_path, 
                                                 str_bankpts_path, parm_ivert, XnPtDist, 
                                                 parm_ratiothresh, parm_slpthresh, logger)
+                time_dict['chanmetrics_bankpts'] = float(time.clock()-st)
 
                 # ========================== << BANK PIXELS AND WIDTH FROM CURVATURE >> ====================================
+                st = time.clock()
                 funcs_v2.bankpixels_from_curvature_window(df_coords, str_dem_path, str_bankpixels_path, 
                                                             cell_size, use_wavelet_curvature_method, logger) # YES!        
+                time_dict['bankpixels_from_curvature_window'] = float(time.clock()-st)
 
+                st = time.clock()
                 funcs_v2.channel_width_from_bank_pixels(df_coords, str_net_path, str_bankpixels_path, 
                                                             str_reachid, i_step, max_buff, 
                                                             str_chanmet_segs, logger)        
+                time_dict['channel_width_from_bank_pixels'] = float(time.clock()-st)
 
                 # ============================= << DELINEATE FIM >> =====================================
+                st = time.clock()
                 funcs_v2.fim_hand_poly(str_hand_path, str_sheds_path, str_reachid, 
                                             str_fim_path, str_fim_csv, logger)
+                time_dict['fim_hand_poly'] = float(time.clock()-st)
 
                 # ==================== << HAND CHARACTERISTICS >> ===========
+                st = time.clock()
                 funcs_v2.hand_analysis_chsegs(str_hand_path, str_chanmet_segs, str_raster_net_path, str_fim_path, str_dem_path, logger)
+                time_dict['hand_analysis_chsegs'] = float(time.clock()-st)
 
                 # ============================ << FLOODPLAIN METRICS >> =====================================
                 # 1D approach:
+                st = time.clock()
                 funcs_v2.read_fp_xns_shp_and_get_1D_fp_metrics(str_fpxns_path, str_fim_path, str_dem_path, logger)
+                time_dict['read_fp_xns_shp_and_get_1D_fp_metrics'] = float(time.clock()-st)
 
                 # 2D approach:
+                st = time.clock()
                 funcs_v2.fp_metrics_chsegs(str_fim_path, 'ch_wid_tot', str_chanmet_segs, logger)
+                time_dict['fp_metrics_chsegs'] = float(time.clock()-st)
 
                 end_time = time.clock() - start_time_i
                 logger.info(f'\nRun time for {hucID}:  {end_time}\r\n')
+
+                run_time_json = huc_dir  / f'{hucID}_run_times.json'
+                with open(run_time_json, 'w') as f:
+                    json.dump(time_dict, f)
+                print (time_dict)
