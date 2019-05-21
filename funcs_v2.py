@@ -57,7 +57,7 @@ from shapely.ops import unary_union
 import fiona
 from fiona import collection
 from fiona.crs import from_epsg
-import jenkspy
+# import jenkspy
 
 #import gospatial as gs
 
