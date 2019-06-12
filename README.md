@@ -45,7 +45,7 @@ Fast and constrained breach methods failed to successfully breach roads and gene
 ## Requirements:
  
  * Anaconda3 (Conda env file is provided which installs correct version of Python and dependencies) 
- * Whitebox Tools (*not Whitebox GAT*)
+ * Whitebox Tools (*not Whitebox GAT*) 
  * TauDEM  (*including dependencies*)
  * Download FACET Ancillary Data [here](https://www.sciencebase.gov/catalog/item/5cddaefee4b02927374637a9). The page has various FACET ancillary datasets for Chesapeake Bay Watershed:
    * Physiographic Regions (*required*)
@@ -90,44 +90,6 @@ You've successfully download FACET code and switched to latest branch
 
 [WhiteboxTools](https://www.uoguelph.ca/~hydrogeo/software.shtml#wgat) (WBT) is a standalone open source swiss army knife of geospatial tools supported by Dr. John Lindsay at University of Guelph, Canada. And FACET relies on WBT's algorithms for hydrological conditioning DEMs as part of pre-processing step. 
 
-### Setting up Whitebox Tools
-
-***Caution - 05/20/2019: WhiteboxTools v. 0.15.0 binaries has an issue reading shapefiles with certain missing geometries. [The issue was addressed](https://github.com/jblindsay/whitebox-tools/issues/34) but the latest version has not been released, so we recommend compiling WhiteboxTools to get latest updates (see below for more instructions)***
-
-### How-to compile Whitebox Tools on Windows:
-Open your git window, navigate to where you want to create the repo and type the following commands:
-
-        cd c:\chesapeake_bay
-
-        git clone https://github.com/jblindsay/whitebox-tools.git
- 
-Now open your Anaconda window and navigate to wherever you saved the repository say if you saved it under `c:\chesapeake_bay`
- 
-        cd c:\chesapeake_bay\whitebox-tools
- 
-From your Anaconda window type following command to install Rust (native language in which whitebox tools are written). Also, Rust requires [Microsoft Visual Studio 2017](https://docs.microsoft.com/en-us/visualstudio/releasenotes/vs2017-relnotes) to be installed before you execute the command
- 
-        conda install -c anaconda rust
-
-After installing Rust then execute the following command. It takes ~30-40 minutes to compile.
- 
-        Cargo build --release
- 
-Once compilation is complete. Lastly, you will need to move `whitebox_tools.exe` from `c:\chesapeake_bay\whitebox-tools\target\release' to `c:\chesapeake_bay\whitebox-tools' which can be done manually copying and pasting the exe file or executing the following command in your Anaconda window prompt
-
-        copy c:\chesapeake_bay\whitebox-tools\target\release\whitebox_tools.exe c:\chesapeake_bay\whitebox-tools 
-
-[Install WhiteboxTools](https://www.uoguelph.ca/~hydrogeo/WhiteboxTools/download.html) and [user manual](https://jblindsay.github.io/wbt_book/intro.html). Download the latest version of WBT. *Note: FACET uses WhiteboxTools (WBT), not Whitebox Geospatial Analysis Tools (GAT)* 
-
-Unzip `WhiteboxTools_win_amd64.zip` and extract the `WBT` folder under `c:\cheaspeake_bay`
-
-The file structure should look like this:
-       
-        c:\
-        └── chesapeake_bay
-            ├── FACET
-            └── WBT
-
 ### Downloading GoSpatial for alternative breach algorithm:
 
 Download and extract the zip file, and remember the path to `go-spatial_win_*.exe` from [here](https://www.uoguelph.ca/~hydrogeo/software.shtml). The download link is under 'legacy software' 
@@ -168,11 +130,11 @@ Below is sample directory structure for FACET data that outlines where files sho
         └── chesapeake_bay
             ├── facet_ancillary_data 
             |       ├── census_roads_2018_mid_atl.shp
+            |       ├── census_rails_2018_mid_atl.shp
             |       ├── CFN_HUC10_prj.shp
             |       ├── HUC10_CBW.shp
             |       └── Physio_prj.shp
             ├── FACET
-            ├── whitebox-tools
             ├── go-spatial
             |     └── go-spatial_win_amd64.exe
             └── sample_data 
@@ -217,7 +179,7 @@ Here is an example of config file. Please not `.INI` syntax instructions are pro
         parm_slpthresh      : 0.03
         p_fpxnlen           : 100
         ; p_buffxnlen       : 30
-        ; p_xngap           : 3
+        p_xngap           : 3
 
         [width from curvature via buff. method]
         use_wavelet_curvature_method : False
@@ -229,13 +191,12 @@ Here is an example of config file. Please not `.INI` syntax instructions are pro
         mpi_path            : C:/Program Files/Microsoft MPI/Bin/mpiexec.exe
         taudem_path         : C:/Program Files/TauDEM/TauDEM5Exe
         taudem cores        : 2
-        wbt_path            : C:/.../whitebox-tools
         go-spatial          : C:/.../go-spatial_win_amd64.exe
-        whitebox            : True
         wt_grid             : True
         data_dir            : C:/.../sample_data
         physio              : C:/.../Physio_prj.shp
         census roads        : C:/.../census_roads_2018_mid_atl.shp
+        census rails        : C:/.../census_rails_2018_mid_atl.shp
 
         [breach options]
         # see README for detailed explanation. Pick ONLY ONE!
@@ -257,12 +218,12 @@ Here is an example of config file. Please not `.INI` syntax instructions are pro
   * `C:/Program Files/Microsoft_MPI/...`
   * `C:/Program Files/TauDEM/...`
 * `taudem cores`: number of cores TauDEM can use to process. The default is 2, but can be changed based on your CPU
-* `wbt_path`: pay attention to your path, if you've compiled Whitebox Tools then your folder name will be `whitebox-tools` i.e. name of the repo you have cloned, and if you downloaded pre-compiled binaries then your folder name will be `WBT`. Also, make sure that you have `whitebox_tools.exe` inside the folder before executing FACET
 * `go-spatial`: complete path of `go-spatial_win_amd64.exe`
 
 * `data_dir`:  complete data path e.g. `C:/.../sample_data`. The structure should follow what's listed below (see **FACET File Structure**)
 * `physio`: [download physiographic regions shapefile, unzip and provide complete path](##Requirements), unzip and link the path here for the physiographic shapefile 
 * `census roads`: [download Census All Roads (2018) shapefile, unzip and provide complete path](##Requirements), unzip and link the path here for the physiographic shapefile 
+* `census rails`: [download Census All Rails (2018) shapefile, unzip and provide complete path](##Requirements), unzip and link the path here for the physiographic shapefile 
 
 After successfully modifying the config file and organizing the data folder, we are ready to run the FACET code. At present, FACET is best executed using command line.
 

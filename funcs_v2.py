@@ -37,56 +37,46 @@ does not imply endorsement by the U.S. Geological Survey.
 NOTES
 ------------------------------------------------------------------------------
 """
-from pathlib import Path
 import time
-import itertools
-import subprocess
-import numpy as np
-import scipy.ndimage as sc
-from scipy import signal
-from scipy.ndimage import label
-import os
-from math import atan, ceil
 import sys
-from math import isinf, sqrt
-import rasterio
-from rasterio import merge, mask
-from rasterio.warp import calculate_default_transform, reproject, Resampling, transform
+import subprocess
+import scipy.ndimage as sc
 import rasterio.features
-from rasterio.features import shapes
+import rasterio
 import pandas as pd
+import os
+import numpy as np
+import itertools
 import geopandas as gpd
-from geopandas.tools import sjoin
-from shapely.geometry import shape, mapping, LineString, Point
-from shapely.ops import unary_union
 import fiona
+from shapely.ops import unary_union
+from shapely.geometry import shape, mapping, LineString, Point
+from scipy.ndimage import label
+from scipy import signal
+from rasterio.warp import calculate_default_transform, reproject, Resampling, transform
+from rasterio.features import shapes
+from rasterio import merge, mask
+from pathlib import Path
+from math import isinf, sqrt
+from math import atan, ceil
+from geopandas.tools import sjoin
 
 np.seterr(over='raise')
 
+# import whitebox
+import whitebox
+wbt = whitebox.WhiteboxTools()
+wbt.verbose = False
 
-def breach_dem(str_whitebox_path, str_dem_path, breach_output):
-    path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
-    tool_WBT = "-r=BreachDepressions"
-    input_WBT = f"-i={str_dem_path}"
-    output_WBT = f"-o={breach_output}"
-    fill_pits_var = "--fill_pits=True"
-
-    exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT, fill_pits_var] + ["-v"]
-    # print (exec_WBT)
-    try:
-        subprocess.check_call(exec_WBT)
-    except subprocess.CalledProcessError:
-        sys.exit(0)
-    # finally:
-    #     return breach_output
-
+def breach_dem(str_dem_path, breach_output):
+    # breach dem
+    wbt.breach_depressions(str_dem_path, breach_output, fill_pits=False)
 
 def str2bool(x):
     if x in ('True', 'true', 't', 'T'):
         return True
     elif x in ('False', 'false', 'f', 'F'):
         return False
-
 
 def run_tauDEM(cmd):
     ''' execute tauDEM commands '''
@@ -108,7 +98,6 @@ def run_tauDEM(cmd):
         print(f'failed to execute shell: {e}')
     except IOError  as e:
         print(f'failed to read file(s): {e}')
-
 
 def open_memory_tif(arr, meta):
     from rasterio.io import MemoryFile
@@ -148,61 +137,78 @@ def breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_
 # ===============================================================================
 #  Hydrologically condition DEM to allow breaching road & stream x-cross sections
 # ===============================================================================
-def cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_path, str_nhd_path, census_roads, str_whitebox_path):
+def cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_path, str_nhd_path, census_roads, census_rails):
     st = time.clock()
     # temp files
     tmp_roads = str(huc_dir / 'tmp_roads.shp')
+    tmp_rails = str(huc_dir / 'tmp_rails.shp')
     dem_mask = str(huc_dir / 'mask.shp')
     x_sect_pts = str(huc_dir / 'x_section_pts.shp')
     x_sect_polys = str(huc_dir / 'x_section_polys.shp')
     ds_min_filter = str(huc_dir / 'ds_min_filter.tif')
     ds_min_clip = str(huc_dir / 'ds_min_clip.tif')
     dem_merge = str(huc_dir / 'dem_road_stream.tif')
+
     # dem_merge_breach    = str(huc_dir / f'{hucID}_dem_rd_strm_breach.tif')
+    shps = [(census_roads, tmp_roads), 
+            (census_rails, tmp_rails)]
 
-    # whitebox clip
-    path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
-    tool_WBT = "-r=Clip"
-    input_WBT = f"-i={census_roads}"
-    clip_WBT = f"--clip={dem_mask}"
-    output_WBT = f"-o={tmp_roads}"
+    for shp in shps:
+        # whitebox clip
+        inSHP, outSHP = shp[0], shp[1]
+        wbt.clip(inSHP, dem_mask, outSHP)
 
-    exec_WBT = [path_WBT, tool_WBT, input_WBT, clip_WBT, output_WBT] + ["-v"]
-    # print (exec_WBT)
-    try:
-        subprocess.check_call(exec_WBT)
-    except subprocess.CalledProcessError:
-        sys.exit(0)
+    # get intersections for roads x streams and railroads x streams
+    # ### OLD METHOD USES WBT 
+    # # TODO -- replace WBT's intersection method with Fiona+Shapely solution
+    # path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
+    # tool_WBT = "-r=LineIntersections"
+    # i1_WBT = f"--i1={tmp_roads}"
+    # i2_WBT = f"--i2={str_nhd_path}"
+    # output_WBT = f"-o={x_sect_pts}"
 
-    # TODO -- replace WBT's intersection method with Fiona+Shapely solution
-    path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
-    tool_WBT = "-r=LineIntersections"
-    i1_WBT = f"--i1={tmp_roads}"
-    i2_WBT = f"--i2={str_nhd_path}"
-    output_WBT = f"-o={x_sect_pts}"
-
-    exec_WBT = [path_WBT, tool_WBT, i1_WBT, i2_WBT, output_WBT] + ["-v"]
-    # print (exec_WBT)
-    try:
-        subprocess.check_call(exec_WBT)
-    except subprocess.CalledProcessError:
-        sys.exit(0)
-
-    # Get the line layers:
+    # exec_WBT = [path_WBT, tool_WBT, i1_WBT, i2_WBT, output_WBT] + ["-v"]
+    # # print (exec_WBT)
+    # try:
+    #     subprocess.check_call(exec_WBT)
+    # except subprocess.CalledProcessError:
+    #     sys.exit(0)
+    
+    # Read line layers:
     gdf_nhd = gpd.read_file(str(str_nhd_path))
     gdf_roads = gpd.read_file(str(tmp_roads))
-    gdf_x_pts = gpd.read_file(str(x_sect_pts))
+    gdf_rails = gpd.read_file(str(tmp_rails))
+
+    # find unary_unions as points for streams x roads and rails
+    pts_0 = gdf_roads.unary_union.intersection(gdf_nhd.unary_union)
+    pts_1 = gdf_rails.unary_union.intersection(gdf_nhd.unary_union)
+
+    # convert shapely geometries to gpd dataframe
+    pts_list = []
+    for pt in [pts_0, pts_1]:
+        p = [{'properties': {'pt_id': x}, 
+            'geometry': mapping(Point(i.x, i.y))} 
+            for x, i in enumerate(pt.geoms)]
+        p_gdf = gpd.GeoDataFrame.from_features(p)
+        pts_list.append(p_gdf)
+
+    # merge both points gdfs, update crs and write out  files
+    points  = pd.concat(pts_list).pipe(gpd.GeoDataFrame)
+    points.crs = gdf_nhd.crs
+    points.to_file(str(x_sect_pts))
+
+    gdf_x_pts = points
 
     # Buffer:
     gdf_nhd['geometry'] = gdf_nhd['geometry'].buffer(25)  # projected units (m)
     gdf_roads['geometry'] = gdf_roads['geometry'].buffer(50)  # projected units (m)
+    gdf_rails['geometry'] = gdf_rails['geometry'].buffer(50)  # projected units (m)
     gdf_x_pts['geometry'] = gdf_x_pts['geometry'].buffer(50)  # projected units (m)
 
     # Intersect
     intersect_1 = gpd.overlay(gdf_nhd, gdf_roads, how='intersection')  # nhd x roads
-    gdf_x_sect_polys = gpd.overlay(gdf_x_pts, intersect_1, how='intersection')  # x-section pts x nhd + roads
-
-    # poly_int_sp = multi2single(intersect_2)
+    intersect_2 = gpd.overlay(gdf_rails, intersect_1, how='intersection')  # nhd + roads x rails
+    gdf_x_sect_polys = gpd.overlay(gdf_x_pts, intersect_2, how='intersection')  # x-section pts x nhd + roads + rails
 
     # Add common ID field
     # gdf_x_sect_polys['id'] = np.arange(gdf_x_sect_polys.shape[0])
@@ -238,19 +244,12 @@ def cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_path, str_nhd_p
         dst.write_band(1, arr_min)
 
     # clip ds_min_filter.tif by x-section polys
-    path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
-    tool_WBT = "-r=ClipRasterToPolygon"
-    i_WBT = f"-i={ds_min_filter}"
-    poly_WBT = f"--polygons={x_sect_polys}"
-    output_WBT = f"-o={ds_min_clip}"
-    option_WBT = "--maintain_dimensions"  # =True"
-
-    exec_WBT = [path_WBT, tool_WBT, i_WBT, poly_WBT, output_WBT, option_WBT] + ["-v"]
-    print(exec_WBT)
-    try:
-        subprocess.check_call(exec_WBT)
-    except subprocess.CalledProcessError:
-        sys.exit(0)
+    wbt.clip_raster_to_polygon(
+        ds_min_filter, 
+        x_sect_polys, 
+        ds_min_clip, 
+        maintain_dimensions=True
+    )
 
     # Read DEMs
     dem_min = open_memory_tif(rasterio.open(ds_min_clip, 'r').read(1), profile)
@@ -470,7 +469,7 @@ def reproject_vector_layer(path, str_path_to_file, str_target_proj4):
 # ==========================================================================
 #   For clipping features
 # ==========================================================================
-def clip_features_using_grid(str_lines_path, output_filename, str_dem_path, in_crs, str_whitebox_path, logger):
+def clip_features_using_grid(str_lines_path, output_filename, str_dem_path, in_crs, logger):
     logger.info('Clipping streamlines to site DEM:')
 
     # Polygonize the raster DEM with rasterio:    
@@ -494,18 +493,8 @@ def clip_features_using_grid(str_lines_path, output_filename, str_dem_path, in_c
     poly_df.to_file(tmp_shp)
 
     # whitebox clip
-    path_WBT = f"{str_whitebox_path}\\whitebox_tools.exe"
-    tool_WBT = "-r=Clip"
-    input_WBT = f"-i={str_lines_path}"
-    clip_WBT = f"--clip={tmp_shp}"
-    output_WBT = f"-o={output_filename}"
+    wbt.clip(str_lines_path, tmp_shp, output_filename)
 
-    exec_WBT = [path_WBT, tool_WBT, input_WBT, clip_WBT, output_WBT] + ["-v"]
-    # print (exec_WBT)
-    try:
-        subprocess.check_call(exec_WBT)
-    except subprocess.CalledProcessError:
-        sys.exit(0)
     '''
     poly = next(results)
     poly_shp = shape(poly['geometry'])
@@ -768,7 +757,7 @@ def run_gospatial_whiteboxtool(tool_name, args, exe_path, exe_name, wd, callback
 #   1. Breaching and filling
 #   2. TauDEM functions
 # ===============================================================================
-def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, str_whitebox_path, run_wg,
+def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem_path, run_wg,
                    run_taudem, physio, hucID, breach_filepath, inputProc):
     try:
         # << Define all filenames here >>
@@ -833,22 +822,6 @@ def preprocess_dem(root, str_streamlines_path, dst_crs, str_mpi_path, str_taudem
         Arg Name: SubsequentFilling, type: bool, Description: Perform post-breach filling?
         '''
         # =================== << Whitebox Functions >> =====================
-        # if run_whitebox:
-        #     path_WBT        = f"{str_whitebox_path}\\whitebox_tools.exe"
-        #     tool_WBT        = "-r=BreachDepressions"
-        #     input_WBT       = f"-i={str_dem_path}"
-        #     output_WBT      = f"-o={breach_filepath_tif_tmp}"
-        #     fill_pits_var   = "--fill_pits={pit_fill}"
-
-        #     exec_WBT = [path_WBT, tool_WBT, input_WBT, output_WBT, fill_pits_var] + ["-v"]
-        #     # print (exec_WBT)
-        #     try:
-        #         subprocess.check_call(exec_WBT)
-        #     except subprocess.CalledProcessError:
-        #         sys.exit(0)
-
-        #     # define_grid_projection(breach_filepath_tif_tmp, dst_crs, breach_filepath_tif_proj)
-
         if run_wg:
             create_wg_from_streamlines(str_streamlines_path, str_dem_path, str_danglepts_path)
 

@@ -38,17 +38,18 @@ NOTES
 ------------------------------------------------------------------------------
 """
 
-import glob
-import time
-import os
-import sys
-import pandas as pd
-import logging
-import configparser
 from pathlib import Path
+import configparser
 import funcs_v2
-import config
+import glob
+import logging
+import os
+import pandas as pd
+import sys
+import time
 
+import config
+import funcs_v2
 
 def initialize_logger(log_file):
     logger = logging.getLogger('logger_loader')
@@ -61,13 +62,11 @@ def initialize_logger(log_file):
     logger.addHandler(handler)
     return logger
 
-
 def clear_out_logger(logger):
     handlers = logger.handlers[:]
     for handler in handlers:
         handler.close()
         logger.removeHandler(handler)
-
 
 if __name__ == '__main__':
 
@@ -103,13 +102,12 @@ if __name__ == '__main__':
     inputProc = Config['paths and flags']['taudem cores']  # str(2) # number of cores to use for TauDEM processes
     str_mpi_path = Config['paths and flags']['mpi_path']
     str_taudem_dir = Config['paths and flags']['taudem_path']
-    str_whitebox_path = Config['paths and flags']['wbt_path']
-    run_whitebox = Config['paths and flags']['whitebox']  # Run Whitebox-BreachDepressions?
     run_wg = Config['paths and flags'][
         'wt_grid']  # Run create weight grid by finding start points from a given streamlines layer?
     run_taudem = Config['paths and flags']['taudem']  # Run TauDEM functions?
     physio = Config['paths and flags']['physio']
     census_roads = Config['paths and flags']['census roads']
+    census_rails = Config['paths and flags']['census rails']
     gs_path = Config['paths and flags']['go-spatial']
 
     # define breach method
@@ -120,6 +118,7 @@ if __name__ == '__main__':
 
     # test to see at least one breach method is defined
     mtd_sums = [rd_strm_breach_wbt, rd_strm_breach_gs, breach_wbt]
+    print(mtd_sums)
     mtd_sum = sum(map(int, mtd_sums))
     if mtd_sum is 1:
         pass
@@ -139,53 +138,9 @@ if __name__ == '__main__':
     log_file = Config['logging']['log_file']
 
     # logging
-    logger = initialize_logger(log_file)
-    # logger.info(f'Following HUCs will be skipped based on exclusion list: {skip_str}')
-    # print(str_reachid)
-    # print(str_orderid)
-    # print(parm_ivert)
-    # print(XnPtDist)
-    # print(parm_ratiothresh)
-    # print(parm_slpthresh)
-    # print(p_fpxnlen)
-    # print(use_wavelet_curvature_method)
-    # print(i_step)
-    # print(max_buff)
-    # print(str_mpi_path)
-    # print(str_taudem_dir)
-    # print(str_whitebox_path)
-    # print(run_whitebox)
-    # print(run_wg)
-    # print(run_taudem)
-    """
-    # << PARAMETERS >>  
-    str_reachid='LINKNO'
-    str_orderid='strmOrder'
-    
-    # Cross section method:
-    parm_ivert = 0.2 # 0.2 default
-    XnPtDist = 3 # 3 is default  Step along Xn length for interpolating elevation
-    parm_ratiothresh = 1.5 # 1.5 default
-    parm_slpthresh = 0.03 # 0.03 default
-#    p_buffxnlen = 30 # meters (if UTM) ?? (cross section length) Now defined in write_xns_shp
-#    p_xngap = 3 # 3 default  (spacing between cross sections)
-    p_fpxnlen=100 # 2D cross-section method (assign by order?)
-    
-    # Width from curvature via buffering method:
-    use_wavelet_curvature_method = False
-    i_step = 100 # length of reach segments for measuring width from bank pixels (and others?)
-    max_buff = 30 # maximum buffer length for measuring width based on pixels  
-    
-    # Preprocessing paths and parameters:
-    str_mpi_path      = r'C:\Program Files\Microsoft MPI\Bin\mpiexec.exe'
-    str_taudem_dir    = r'C:\Program Files\TauDEM\TauDEM5Exe' #\D8FlowDir.exe"'
-    str_whitebox_path = r"D:\git_projects\FACET\WBT" # WBT 0.12 version
-  
-    # Flags specifying what to run:
-    run_whitebox    = True  # Run Whitebox-BreachDepressions?
-    run_wg          = True       # Run create weight grid by finding start points from a given streamlines layer?
-    run_taudem      = True   # Run TauDEM functions?    
-    """
+    logger = funcs_v2.initialize_logger(log_file)
+    logger.info(f'Following HUCs will be skipped based on exclusion list: {skip_str}')
+
     # ===============================================================================================
     #                             BEGIN BULK PROCESSING LOOP
     # ===============================================================================================
@@ -245,19 +200,19 @@ if __name__ == '__main__':
 
                 # Clip the HUC4 nhdhr streamlines layer to the HUC10:
                 funcs_v2.clip_features_using_grid(str_nhdhr_huc4_proj, str_nhdhr_huc10, str_dem_path_proj, spatial_ref,
-                                                  str_whitebox_path, logger)
+                                                  logger)
 
                 # Call preprocessing function:
                 if rd_strm_breach_wbt:
                     dem_merge = funcs_v2.cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_proj,
                                                                               str_nhdhr_huc10, census_roads,
-                                                                              str_whitebox_path)
-                    funcs_v2.breach_dem(str_whitebox_path, dem_merge, str_breached_dem_path)
+                                                                              census_rails)
+                    funcs_v2.breach_dem(dem_merge, str_breached_dem_path)
 
                 elif rd_strm_breach_gs:
                     dem_merge = funcs_v2.cond_dem_for_road_x_stream_crossings(huc_dir, hucID, str_dem_proj,
                                                                               str_nhdhr_huc10, census_roads,
-                                                                              str_whitebox_path)
+                                                                              census_rails)
                     funcs_v2.breach_using_gs_wbt_method(huc_dir, str_dem_proj, gs_path, str_breached_dem_path,
                                                         spatial_ref)
 
@@ -267,11 +222,11 @@ if __name__ == '__main__':
 
                 elif breach_wbt:
                     # default breach
-                    funcs_v2.breach_dem(str_whitebox_path, str_dem_proj, str_breached_dem_path)
+                    funcs_v2.breach_dem(str_dem_proj, str_breached_dem_path)
 
                 # additional preprocessing steps
                 funcs_v2.preprocess_dem(huc_dir, str_nhdhr_huc10, spatial_ref,
-                                        str_mpi_path, str_taudem_dir, str_whitebox_path,
+                                        str_mpi_path, str_taudem_dir,
                                         run_wg, run_taudem, physio,
                                         hucID, str_breached_dem_path, inputProc)
 
