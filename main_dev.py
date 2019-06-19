@@ -138,7 +138,7 @@ if __name__ == '__main__':
     log_file = Config['logging']['log_file']
 
     # logging
-    logger = funcs_v2.initialize_logger(log_file)
+    logger = initialize_logger(log_file)
     logger.info(f'Following HUCs will be skipped based on exclusion list: {skip_str}')
 
     # ===============================================================================================
